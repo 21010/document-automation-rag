@@ -1,0 +1,30 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+gemini.md
+
+# IDE
+.vscode/
+.idea/
+.antigravitycli/
+
+# Caches
+.pytest_cache/
+.ruff_cache/
+.pyre/
+
+# Security
+.env
+.env.*
+*.env
+
+# Data
+data/
+*.db

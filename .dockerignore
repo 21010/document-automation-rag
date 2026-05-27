@@ -1,0 +1,27 @@
+# Version control
+.git
+
+# Python artifacts
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+
+# Local data artifacts (uploaded files are runtime data, not build context)
+data/uploads/*
+data/*.db
+
+# Development-only files
+.python-version
+README.md
+docs/
+tests/
+.env
+
+# Docker meta-files (don't need to copy themselves into the image)
+Dockerfile
+.dockerignore
+
+# NOTE: pyproject.toml and uv.lock are intentionally NOT excluded —
+# the builder stage needs them to run `uv sync --frozen`.
