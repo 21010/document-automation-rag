@@ -1,0 +1,32 @@
+services:
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      # Map the host's existing Ollama models so we don't have to re-download them
+      - ~/.ollama:/root/.ollama
+    networks:
+      - rag-net
+    restart: unless-stopped
+
+  rag-invoice-api:
+    build: .
+    container_name: rag-invoice-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Use the internal docker network to route traffic straight to the ollama container
+      - OPENAI_BASE_URL=http://ollama:11434/v1
+    volumes:
+      - ./data:/app/data
+    networks:
+      - rag-net
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+networks:
+  rag-net:
+    driver: bridge

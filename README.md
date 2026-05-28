@@ -4,9 +4,7 @@ A state-of-the-art document intelligence platform that transforms raw invoice im
 
 ## 🚀 Key Features
 
-- **Dual-Approach Processing**:
-  - **Hybrid Mode**: PaddleOCR (Vision) + Gemini (Text Structuring).
-  - **Native VLM Mode**: Direct Gemini Vision (Image-to-JSON) for maximum spatial accuracy.
+- **Native VLM Mode**: Direct Gemini Vision (Image-to-JSON) for maximum spatial accuracy.
 - **Advanced RAG Engine**:
   - **Hybrid Query Routing**: LLM-based router that chooses between SQL, Vector, or Hybrid search.
   - **Semantic Chunking**: Intelligent chunking based on document logic (Header, Line Items, Totals).
@@ -23,9 +21,9 @@ A state-of-the-art document intelligence platform that transforms raw invoice im
 
 ## 🏗️ Architecture (SOLID & CUPID)
 
-- **Strategy Pattern**: Decoupled document processors (`HybridProcessor` vs `VLMProcessor`).
+- **Strategy Pattern**: Extensible document processors via `DocumentProcessor` base class.
 - **Dependency Inversion**: Clean service layers that depend on abstractions, ensuring testability.
-- **Unix Philosophy**: Modular components for OCR, LLM, VectorDB, and SQL.
+- **Unix Philosophy**: Modular components for LLM, VectorDB, and SQL.
 
 ---
 
@@ -36,9 +34,8 @@ A state-of-the-art document intelligence platform that transforms raw invoice im
 ├── src/
 │   ├── api/            # Routes, Schemas, Dependencies, Health
 │   ├── core/
-│   │   ├── ocr/        # PaddleOCR integration (abstract base + implementation)
 │   │   ├── llm/        # Gemini SDK, Specialized Prompts
-│   │   ├── processors/ # Strategy Pattern: HybridProcessor, VLMProcessor
+│   │   ├── processors/ # VLMProcessor
 │   │   ├── rag/        # Optimized RAG Engine & Hybrid Router
 │   │   └── vector_db/  # Qdrant client & metadata-aware indexing
 │   ├── models/         # Pydantic (StructuredInvoice) & SQLAlchemy SQL models
@@ -58,8 +55,7 @@ A state-of-the-art document intelligence platform that transforms raw invoice im
 | Method | Endpoint | Status | Description |
 |--------|----------|--------|-------------|
 | `GET`  | `/health` | `200 OK` | Component-level readiness check |
-| `POST` | `/documents/upload` | `202 Accepted` | Hybrid OCR + LLM mode |
-| `POST` | `/documents/upload/vlm` | `202 Accepted` | Native Vision-to-JSON mode |
+| `POST` | `/documents/upload` | `202 Accepted` | Upload document and trigger Native Vision-to-JSON mode |
 | `GET`  | `/documents/{id}` | `200 OK` / `404` | Full 10-field structured schema + line items |
 | `POST` | `/documents/{id}/index` | `200 OK` / `409` | Triggers Metadata-Aware indexing |
 | `POST` | `/rag/search` | `200 OK` | Semantic search over indexed chunks |
@@ -171,7 +167,10 @@ By copying only the dependency manifest files first and running `uv sync` before
 
 ### Building and Running the Container
 
-**Prerequisites:** Docker installed and running. A valid `GEMINI_API_KEY`.
+**Prerequisites:** Docker installed and running.
+
+**Important Note on AI Models:** This project supports Google Gemini (cloud) and **any OpenAI-compatible endpoint** (including vLLM, LM Studio, Groq, etc.).
+If you have a `GEMINI_API_KEY`, the application will use it. If the key is omitted, it automatically falls back to your local endpoint using `OPENAI_BASE_URL`.
 
 **Step 1 — Build the image:**
 
@@ -188,44 +187,45 @@ docker run -d \
   --name rag-invoice-api \
   -p 8000:8000 \
   -e GEMINI_API_KEY=your_api_key_here \
+  -e OPENAI_BASE_URL=http://host.containers.internal:11434/v1 \
   -v $(pwd)/data:/app/data \
   rag-invoice-api:latest
-```
-
-| Flag | Purpose |
-|------|---------|
-| `-d` | Run in detached (background) mode |
-| `-p 8000:8000` | Map host port 8000 to container port 8000 |
-| `-e GEMINI_API_KEY=...` | Pass the API key as an environment variable |
-| `-v $(pwd)/data:/app/data` | Mount local `data/` directory for persistent SQLite DB and uploads |
-
-**Step 3 — Verify the container is running:**
+**Step 1 — Start the environment with Docker Compose:**
 
 ```bash
-curl http://localhost:8000/health
+docker-compose up -d --build
+```
+*(Note: If you use Podman Desktop, use `podman-compose up -d --build`)*
+
+This command will automatically:
+1. Start an isolated Ollama container natively inside the virtual machine.
+2. Mount your existing `~/.ollama` folder so models don't need re-downloading.
+3. Build and start the `rag-invoice-api`.
+4. Network them together so the API can reach Ollama internally via `http://ollama:11434/v1` without hitting Windows firewalls.
+
+**Step 2 — Verify models are pulled:**
+
+If you haven't pulled the models yet, you can pull them directly into the running Ollama container:
+```bash
+docker exec ollama ollama pull llama3.2-vision
+docker exec ollama ollama pull nomic-embed-text
 ```
 
-Expected response:
-```json
-{
-  "status": "ok",
-  "components": {
-    "api": "ready",
-    "gemini_sdk": "ready"
-  }
-}
-```
+**Step 3 — Access the API:**
+
+Open your browser and navigate to:
+- **Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 **Step 4 — View logs:**
 
 ```bash
-docker logs -f rag-invoice-api
+docker-compose logs -f
 ```
 
 **Step 5 — Stop and remove:**
 
 ```bash
-docker stop rag-invoice-api && docker rm rag-invoice-api
+docker-compose down
 ```
 
 ---
@@ -238,7 +238,7 @@ The project is designed to scale dynamically based on workload:
 - **Durable Storage**: Persistent Volume Claims (PVC) ensure your SQLite DB and uploads survive pod restarts.
 
 ```bash
-# Update k8s/secrets.yaml with your base64-encoded GEMINI_API_KEY first, then:
+# Update k8s/secrets.yaml with your base64-encoded GEMINI_API_KEY (or leave blank to use OPENAI_BASE_URL), then:
 kubectl apply -f k8s/secrets.yaml
 kubectl apply -f k8s/rag-app.yaml
 ```

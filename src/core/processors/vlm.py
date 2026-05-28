@@ -9,7 +9,7 @@ from src.core.classifier import DocumentClassifier
 from src.core.constants import DocumentType
 
 # pyrefly: ignore [missing-import]
-from src.core.llm.gemini_service import GeminiService
+from src.core.llm.factory import get_llm_service
 
 # pyrefly: ignore [missing-import]
 from src.core.processors.base import DocumentProcessor, ProcessingResult
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class VLMProcessor(DocumentProcessor):
     def __init__(self):
-        self.gemini = GeminiService()
+        self.gemini = get_llm_service()
         self.classifier = DocumentClassifier()
 
     async def process(self, file_path: str) -> ProcessingResult:

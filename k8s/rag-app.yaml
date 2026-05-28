@@ -15,7 +15,6 @@ metadata:
   name: rag-config
 data:
   PROJECT_NAME: "RAG Invoice Processing Production"
-  OCR_LANG: "en"
   QDRANT_IN_MEMORY: "true"
   DATABASE_URL: "sqlite+aiosqlite:////app/data/documents.db"
 ---

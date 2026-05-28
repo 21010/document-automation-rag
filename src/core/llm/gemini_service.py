@@ -9,6 +9,7 @@ from src.core.config import settings
 
 # pyrefly: ignore [missing-import]
 from src.core.constants import DocumentType
+from src.core.llm.base import LLMService
 
 # pyrefly: ignore [missing-import]
 from src.core.llm.prompts import ROUTER_PROMPT, get_prompt_for_type
@@ -19,7 +20,7 @@ from src.models.invoice import StructuredInvoice
 logger = logging.getLogger(__name__)
 
 
-class GeminiService:
+class GeminiService(LLMService):
     def __init__(self):
         if not settings.GEMINI_API_KEY:
             logger.warning("GEMINI_API_KEY not set. Gemini features will be disabled or fail.")

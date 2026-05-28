@@ -2,7 +2,7 @@ import logging
 import uuid
 
 # pyrefly: ignore [missing-import]
-from src.core.llm.gemini_service import GeminiService
+from src.core.llm.factory import get_llm_service
 
 # pyrefly: ignore [missing-import]
 from src.core.vector_db.qdrant import VectorStore
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class RAGEngine:
     def __init__(self):
-        self.gemini = GeminiService()
+        self.gemini = get_llm_service()
         self.vector_store = None
 
     def _init_vector_store(self, embedding_example: list[float]):
