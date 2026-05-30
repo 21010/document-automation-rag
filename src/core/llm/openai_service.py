@@ -8,7 +8,7 @@ from src.core.config import settings
 from src.core.constants import DocumentType
 from src.core.llm.base import LLMService
 from src.core.llm.prompts import ROUTER_PROMPT, get_prompt_for_type
-from src.models.invoice import StructuredInvoice
+from src.models.invoice import StructuredDocument, StructuredInvoice, get_model_for_type
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +67,10 @@ class OpenAIService(LLMService):
             logger.error(f"Error calling OpenAI API: {e}")
             return ""
 
-    def get_structured_data(self, text: str, doc_type: DocumentType = DocumentType.UNKNOWN) -> StructuredInvoice:
-        base_prompt = get_prompt_for_type(doc_type)
+    def get_structured_data(self, text: str, doc_type: DocumentType = DocumentType.UNKNOWN) -> StructuredDocument:
+        TargetModel = get_model_for_type(doc_type)
+        schema_json = json.dumps(TargetModel.model_json_schema(), indent=2)
+        base_prompt = get_prompt_for_type(doc_type, schema_json)
         prompt = f"{base_prompt}\n\nDocument text:\n{text}\n\nOutput only JSON."
 
         content = self._call_generate(prompt)
@@ -80,12 +82,12 @@ class OpenAIService(LLMService):
                 content = content.split("```")[1].split("```")[0].strip()
 
             data = json.loads(content)
-            return StructuredInvoice(**data)
+            return TargetModel(**data)
         except Exception as e:
             logger.error(
                 f"Error parsing JSON from OpenAI structuring: {e}. Raw content: {content}"
             )
-            return StructuredInvoice()
+            return TargetModel()
 
     def get_embeddings(self, texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
         url = f"{self.base_url}/embeddings"
@@ -107,14 +109,16 @@ class OpenAIService(LLMService):
 
     def extract_from_vision(
         self, image_path: str, doc_type: DocumentType = DocumentType.UNKNOWN
-    ) -> tuple[str, StructuredInvoice]:
+    ) -> tuple[str, StructuredDocument]:
+        TargetModel = get_model_for_type(doc_type)
         try:
             with open(image_path, "rb") as f:
                 image_data = f.read()
 
             b64_image = base64.b64encode(image_data).decode("utf-8")
 
-            base_prompt = get_prompt_for_type(doc_type)
+            schema_json = json.dumps(TargetModel.model_json_schema(), indent=2)
+            base_prompt = get_prompt_for_type(doc_type, schema_json)
             prompt = f"""
             {base_prompt}
             
@@ -130,7 +134,7 @@ class OpenAIService(LLMService):
             content = self._call_generate(prompt, base64_image=b64_image)
 
             raw_text = ""
-            structured_data = StructuredInvoice()
+            structured_data = TargetModel()
 
             if "RAW_TEXT:" in content and "STRUCTURED_JSON:" in content:
                 parts = content.split("STRUCTURED_JSON:")
@@ -143,13 +147,13 @@ class OpenAIService(LLMService):
                     json_part = json_part.split("```")[1].split("```")[0].strip()
 
                 data = json.loads(json_part)
-                structured_data = StructuredInvoice(**data)
+                structured_data = TargetModel(**data)
 
             return raw_text, structured_data
 
         except Exception as e:
             logger.error(f"Error during OpenAI Vision extraction: {e}")
-            return str(e), StructuredInvoice()
+            return str(e), TargetModel()
 
     def route_query(self, query: str) -> dict:
         prompt = f"{ROUTER_PROMPT.format(query=query)}\n\nOutput only JSON."

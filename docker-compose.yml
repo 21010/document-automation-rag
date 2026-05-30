@@ -11,20 +11,33 @@ services:
       - rag-net
     restart: unless-stopped
 
+  ollama-pull:
+    image: docker.io/ollama/ollama:latest
+    container_name: ollama-pull
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: /bin/sh
+    command: -c "sleep 5 && ollama pull llama3.2-vision && ollama pull nomic-embed-text"
+    depends_on:
+      - ollama
+    networks:
+      - rag-net
+
   rag-invoice-api:
     build: .
     container_name: rag-invoice-api
     ports:
       - "8000:8000"
     environment:
-      # Use the internal docker network to route traffic straight to the ollama container
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - OPENAI_BASE_URL=http://ollama:11434/v1
     volumes:
       - ./data:/app/data
     networks:
       - rag-net
     depends_on:
-      - ollama
+      ollama-pull:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 networks:

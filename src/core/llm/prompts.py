@@ -3,21 +3,8 @@ from src.core.constants import DocumentType
 
 DEFAULT_EXTRACTION_PROMPT = """
 Extract structured information from the following document text. 
-Return ONLY a JSON object matching this schema:
-{
-    "nazwa_sklepu": "string",
-    "data": "string",
-    "kwota_koncowa": float,
-    "lista_produktow": [
-        {"name": "string", "quantity": float, "unit_price": float, "total_price": float}
-    ],
-    "numer_faktury": "string",
-    "sprzedawca": "string",
-    "nabywca": "string",
-    "kwota_netto": float,
-    "kwota_brutto": float,
-    "VAT": float
-}
+Return ONLY a valid JSON object exactly matching this strict JSON schema definition:
+{schema_json}
 """
 
 INVOICE_PROMPT = """
@@ -40,16 +27,18 @@ If specific line items aren't present, use the 'lista_produktow' to store key fi
 """
 
 
-def get_prompt_for_type(doc_type: DocumentType) -> str:
+def get_prompt_for_type(doc_type: DocumentType, schema_json: str) -> str:
+    extraction_part = DEFAULT_EXTRACTION_PROMPT.format(schema_json=schema_json)
+    
     match doc_type:
         case DocumentType.INVOICE:
-            return INVOICE_PROMPT + DEFAULT_EXTRACTION_PROMPT
+            return INVOICE_PROMPT + extraction_part
         case DocumentType.RECEIPT:
-            return RECEIPT_PROMPT + DEFAULT_EXTRACTION_PROMPT
+            return RECEIPT_PROMPT + extraction_part
         case DocumentType.FORM:
-            return FORM_PROMPT + DEFAULT_EXTRACTION_PROMPT
+            return FORM_PROMPT + extraction_part
         case _:
-            return DEFAULT_EXTRACTION_PROMPT
+            return extraction_part
 
 
 ROUTER_PROMPT = """

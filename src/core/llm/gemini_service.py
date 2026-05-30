@@ -15,7 +15,7 @@ from src.core.llm.base import LLMService
 from src.core.llm.prompts import ROUTER_PROMPT, get_prompt_for_type
 
 # pyrefly: ignore [missing-import]
-from src.models.invoice import StructuredInvoice
+from src.models.invoice import StructuredDocument, StructuredInvoice, get_model_for_type
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +30,13 @@ class GeminiService(LLMService):
             self.generative_model = settings.GEMINI_GENERATIVE_MODEL
             self.embedding_model = settings.GEMINI_EMBEDDING_MODEL
 
-    def get_structured_data(self, text: str, doc_type: DocumentType = DocumentType.UNKNOWN) -> StructuredInvoice:
+    def get_structured_data(self, text: str, doc_type: DocumentType = DocumentType.UNKNOWN) -> StructuredDocument:
+        TargetModel = get_model_for_type(doc_type)
         if not self.client:
-            return StructuredInvoice()
+            return TargetModel()
 
-        base_prompt = get_prompt_for_type(doc_type)
+        schema_json = json.dumps(TargetModel.model_json_schema(), indent=2)
+        base_prompt = get_prompt_for_type(doc_type, schema_json)
         prompt = f"{base_prompt}\n\nDocument text:\n{text}"
 
         try:
@@ -47,10 +49,10 @@ class GeminiService(LLMService):
                 content = content.split("```")[1].split("```")[0].strip()
 
             data = json.loads(content)
-            return StructuredInvoice(**data)
+            return TargetModel(**data)
         except Exception as e:
             logger.error(f"Error calling Gemini for structuring: {e}")
-            return StructuredInvoice()
+            return TargetModel()
 
     def get_embeddings(self, texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
         """Get embeddings for a list of texts.
@@ -77,16 +79,18 @@ class GeminiService(LLMService):
 
     def extract_from_vision(
         self, image_path: str, doc_type: DocumentType = DocumentType.UNKNOWN
-    ) -> tuple[str, StructuredInvoice]:
+    ) -> tuple[str, StructuredDocument]:
+        TargetModel = get_model_for_type(doc_type)
         if not self.client:
-            return "", StructuredInvoice()
+            return "", TargetModel()
 
         try:
             # Open image file
             with open(image_path, "rb") as f:
                 image_data = f.read()
 
-            base_prompt = get_prompt_for_type(doc_type)
+            schema_json = json.dumps(TargetModel.model_json_schema(), indent=2)
+            base_prompt = get_prompt_for_type(doc_type, schema_json)
             prompt = f"""
             {base_prompt}
             
@@ -113,7 +117,7 @@ class GeminiService(LLMService):
 
             # Parsing logic
             raw_text = ""
-            structured_data = StructuredInvoice()
+            structured_data = TargetModel()
 
             if "RAW_TEXT:" in content and "STRUCTURED_JSON:" in content:
                 parts = content.split("STRUCTURED_JSON:")
@@ -126,13 +130,13 @@ class GeminiService(LLMService):
                     json_part = json_part.split("```")[1].split("```")[0].strip()
 
                 data = json.loads(json_part)
-                structured_data = StructuredInvoice(**data)
+                structured_data = TargetModel(**data)
 
             return raw_text, structured_data
 
         except Exception as e:
             logger.error(f"Error during Gemini Vision extraction: {e}")
-            return str(e), StructuredInvoice()
+            return str(e), TargetModel()
 
     def route_query(self, query: str) -> dict:
         if not self.client:

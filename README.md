@@ -1,10 +1,10 @@
-# RAG Invoice Processing API (Production-Grade Reference)
+# RAG Invoice Processing API
 
-A state-of-the-art document intelligence platform that transforms raw invoice images into searchable, structured insights using a multi-phase AI pipeline.
+A document intelligence platform that transforms raw invoice, receipt or forms images into searchable, structured insights using a multi-phase AI pipeline.
 
-## 🚀 Key Features
+## Key Features
 
-- **Native VLM Mode**: Direct Gemini Vision (Image-to-JSON) for maximum spatial accuracy.
+- **Model-Agnostic VLM Extraction**: Built-in support for both Google Gemini Vision (Cloud) and any OpenAI-compatible endpoints (e.g., local Ollama, vLLM) for end-to-end Image-to-JSON parsing.
 - **Advanced RAG Engine**:
   - **Hybrid Query Routing**: LLM-based router that chooses between SQL, Vector, or Hybrid search.
   - **Semantic Chunking**: Intelligent chunking based on document logic (Header, Line Items, Totals).
@@ -14,7 +14,6 @@ A state-of-the-art document intelligence platform that transforms raw invoice im
   - **Qdrant (Vector)**: Semantic storage for context-aware Retrieval-Augmented Generation.
 - **Enterprise-Ready Infrastructure**:
   - **FastAPI**: Fully asynchronous, non-blocking API with background task orchestration.
-  - **Kubernetes**: Complete manifests with HPA (Auto-scaling), PVC (Durable Storage), and Secrets.
   - **Multi-Stage Docker**: Highly optimized image using `uv` and slim runtimes.
 
 ---
@@ -41,7 +40,6 @@ A state-of-the-art document intelligence platform that transforms raw invoice im
 │   ├── models/         # Pydantic (StructuredInvoice) & SQLAlchemy SQL models
 │   ├── services/       # Document & RAG service orchestrators
 │   └── main.py         # Entry point with Lifespan management
-├── k8s/                # Kubernetes manifests (Deployment, HPA, PVC, Service)
 ├── tests/              # Unit, Integration, and API test suite
 ├── Dockerfile          # Optimized multi-stage build
 ├── .dockerignore       # Docker context governance file
@@ -63,7 +61,13 @@ A state-of-the-art document intelligence platform that transforms raw invoice im
 
 ---
 
-## 🛠️ Local Development
+## 🚀 How to Run the Application (4 Options)
+
+The application is highly flexible and can be run in four distinct ways depending on your environment and API preferences.
+
+### Option 1: Using `uv` (Local Development)
+
+Best for active development. Runs directly on your host machine without containers.
 
 ```bash
 # 1. Install dependencies using uv
@@ -78,6 +82,58 @@ uv run python -m src.main
 # 4. Run the test suite
 uv run pytest tests/
 ```
+
+### Option 2: Using Docker (with GEMINI_API_KEY)
+
+Best for production-like testing using the cloud Gemini Vision API.
+
+```bash
+# 1. Build the image
+docker build -t rag-invoice-api:latest .
+
+# 2. Run the container
+docker run -d \
+  --name rag-invoice-api \
+  -p 8000:8000 \
+  -e GEMINI_API_KEY=your_gemini_api_key_here \
+  -v $(pwd)/data:/app/data \
+  rag-invoice-api:latest
+```
+
+### Option 3: Using Docker (without GEMINI_API_KEY)
+
+Best for using a separate, pre-existing local model (like LM Studio, vLLM, or Groq) using the OpenAI API standard.
+
+```bash
+# 1. Build the image
+docker build -t rag-invoice-api:latest .
+
+# 2. Run the container and point it to your local API
+docker run -d \
+  --name rag-invoice-api \
+  -p 8000:8000 \
+  -e OPENAI_BASE_URL=http://host.docker.internal:11434/v1 \
+  -v $(pwd)/data:/app/data \
+  rag-invoice-api:latest
+```
+*(Note: Use `host.docker.internal` to allow the container to reach an API running on your host machine.)*
+
+### Option 4: Using Docker Compose (App + Local Ollama)
+
+Best for a fully self-contained local stack. This automatically spins up both the API and a local Ollama container. It uses a dedicated init container to automatically download `llama3.2-vision` and `nomic-embed-text`. If `GEMINI_API_KEY` is not provided in your `.env`, it automatically falls back to the local Ollama container.
+
+```bash
+# 1. Start the environment (builds API, starts Ollama, pulls models automatically)
+docker-compose up -d --build
+
+# 2. View logs
+docker-compose logs -f
+
+# 3. Tear down
+docker-compose down
+```
+
+After starting any of the options above, access the API Swagger UI at: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ---
 
@@ -165,80 +221,6 @@ COPY src/ /app/src/              # Changes on every commit — but no slow step 
 
 By copying only the dependency manifest files first and running `uv sync` before copying application code, the expensive package installation step is cached for every commit that does not change `pyproject.toml` or `uv.lock`. This turns a 3–5 minute build into a ~10 second rebuild during iterative development.
 
-### Building and Running the Container
 
-**Prerequisites:** Docker installed and running.
 
-**Important Note on AI Models:** This project supports Google Gemini (cloud) and **any OpenAI-compatible endpoint** (including vLLM, LM Studio, Groq, etc.).
-If you have a `GEMINI_API_KEY`, the application will use it. If the key is omitted, it automatically falls back to your local endpoint using `OPENAI_BASE_URL`.
 
-**Step 1 — Build the image:**
-
-```bash
-docker build -t rag-invoice-api:latest .
-```
-
-This reads the `Dockerfile` in the current directory, sends the build context (filtered by `.dockerignore`), and produces a tagged image.
-
-**Step 2 — Run the container:**
-
-```bash
-docker run -d \
-  --name rag-invoice-api \
-  -p 8000:8000 \
-  -e GEMINI_API_KEY=your_api_key_here \
-  -e OPENAI_BASE_URL=http://host.containers.internal:11434/v1 \
-  -v $(pwd)/data:/app/data \
-  rag-invoice-api:latest
-**Step 1 — Start the environment with Docker Compose:**
-
-```bash
-docker-compose up -d --build
-```
-*(Note: If you use Podman Desktop, use `podman-compose up -d --build`)*
-
-This command will automatically:
-1. Start an isolated Ollama container natively inside the virtual machine.
-2. Mount your existing `~/.ollama` folder so models don't need re-downloading.
-3. Build and start the `rag-invoice-api`.
-4. Network them together so the API can reach Ollama internally via `http://ollama:11434/v1` without hitting Windows firewalls.
-
-**Step 2 — Verify models are pulled:**
-
-If you haven't pulled the models yet, you can pull them directly into the running Ollama container:
-```bash
-docker exec ollama ollama pull llama3.2-vision
-docker exec ollama ollama pull nomic-embed-text
-```
-
-**Step 3 — Access the API:**
-
-Open your browser and navigate to:
-- **Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-
-**Step 4 — View logs:**
-
-```bash
-docker-compose logs -f
-```
-
-**Step 5 — Stop and remove:**
-
-```bash
-docker-compose down
-```
-
----
-
-## ☸️ Kubernetes & Scaling
-
-The project is designed to scale dynamically based on workload:
-
-- **Horizontal Pod Autoscaling (HPA)**: Scales pods from 2 to 10 based on CPU spikes during OCR/VLM tasks.
-- **Durable Storage**: Persistent Volume Claims (PVC) ensure your SQLite DB and uploads survive pod restarts.
-
-```bash
-# Update k8s/secrets.yaml with your base64-encoded GEMINI_API_KEY (or leave blank to use OPENAI_BASE_URL), then:
-kubectl apply -f k8s/secrets.yaml
-kubectl apply -f k8s/rag-app.yaml
-```

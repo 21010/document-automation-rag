@@ -5,11 +5,11 @@ from typing import Any
 from src.core.constants import DocumentType
 
 # pyrefly: ignore [missing-import]
-from src.models.invoice import StructuredInvoice
+from src.models.invoice import StructuredDocument
 
 
 class ProcessingResult:
-    def __init__(self, text: str, structured_data: StructuredInvoice, doc_type: DocumentType, raw_data: Any = None):
+    def __init__(self, text: str, structured_data: StructuredDocument, doc_type: DocumentType, raw_data: Any = None):
         self.text = text
         self.structured_data = structured_data
         self.doc_type = doc_type

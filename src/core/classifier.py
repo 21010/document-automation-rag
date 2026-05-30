@@ -9,7 +9,7 @@ class DocumentClassifier:
         if any(kw in text_lower for kw in ["invoice", "faktura", "nr faktury", "invoice no"]):
             return DocumentType.INVOICE
 
-        if any(kw in text_lower for kw in ["paragon", "fiskalny", "kasa"]):
+        if any(kw in text_lower for kw in ["paragon", "fiskalny", "kasa", "receipt"]):
             return DocumentType.RECEIPT
 
         if any(kw in text_lower for kw in ["form", "application", "formularz", "wniosek"]):
