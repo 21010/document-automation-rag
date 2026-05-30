@@ -1,11 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-# pyrefly: ignore [missing-import]
 from src.core.constants import DocumentType
-
-# pyrefly: ignore [missing-import]
-from src.models.invoice import StructuredDocument
+from src.models.documents import StructuredDocument
 
 
 class ProcessingResult:

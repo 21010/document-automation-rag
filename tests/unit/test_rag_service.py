@@ -1,13 +1,14 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
-# pyrefly: ignore [missing-import]
+import pytest
+
 from src.services.rag_service import RAGService
 
 
-def test_rag_routing_sql():
-    service = RAGService()
-    # Mock the engine's routing response
-    service.engine.gemini.route_query = MagicMock(
+@pytest.mark.asyncio
+async def test_rag_routing_sql():
+    mock_engine = MagicMock()
+    mock_engine.route_and_query = AsyncMock(
         return_value={
             "route": "sql",
             "reasoning": "Query asks for total amount",
@@ -15,20 +16,24 @@ def test_rag_routing_sql():
         }
     )
 
-    # Mock search result
-    service.engine.search = MagicMock(return_value=[])
+    service = RAGService(engine=mock_engine)
 
-    response = service.answer("How many invoices over 100?")
+    response = await service.answer("How many invoices over 100?")
     assert response["route"] == "sql"
 
 
-def test_rag_routing_vector():
-    service = RAGService()
-    service.engine.gemini.route_query = MagicMock(
-        return_value={"route": "vector", "reasoning": "Semantic query", "sql_metadata_filter": {}}
+@pytest.mark.asyncio
+async def test_rag_routing_vector():
+    mock_engine = MagicMock()
+    mock_engine.route_and_query = AsyncMock(
+        return_value={
+            "route": "vector",
+            "reasoning": "Semantic query",
+            "sql_metadata_filter": {},
+        }
     )
 
-    service.engine.search = MagicMock(return_value=[])
+    service = RAGService(engine=mock_engine)
 
-    response = service.answer("What is an invoice?")
+    response = await service.answer("What is an invoice?")
     assert response["route"] == "vector"

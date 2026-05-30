@@ -91,7 +91,7 @@ async def index_document(
         )
 
     metadata = doc.get("structured_data", {})
-    rag_service.index_document(document_id, doc["text"], metadata=metadata)
+    await rag_service.index_document(document_id, doc["text"], metadata=metadata)
     return {"status": "indexed", "document_id": document_id}
 
 
@@ -101,7 +101,7 @@ async def index_document(
     description="Searches the vector index for the most relevant document chunks matching the provided query.",
 )
 async def search_rag(request: SearchRequest, rag_service: RAGService = Depends(get_rag_service)):
-    return rag_service.search(request.query, limit=request.limit)
+    return await rag_service.search(request.query, limit=request.limit)
 
 
 @router.post(
@@ -110,4 +110,4 @@ async def search_rag(request: SearchRequest, rag_service: RAGService = Depends(g
     description="Dynamically answers user questions about indexed documents using a hybrid search and generative LLM response.",  # noqa: E501
 )
 async def answer_rag(request: AnswerRequest, rag_service: RAGService = Depends(get_rag_service)):
-    return rag_service.answer(request.query, limit=request.limit)
+    return await rag_service.answer(request.query, limit=request.limit)

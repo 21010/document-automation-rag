@@ -1,49 +1,46 @@
-import asyncio
-import os
-
 import pytest
 from fastapi.testclient import TestClient
 
-# pyrefly: ignore [missing-import]
-from src.core.db import init_db
-
-# pyrefly: ignore [missing-import]
 from src.main import app
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_db():
-    # Force initialize the database (this will create tables in the configured DB)
-    # Since we use settings.DATABASE_URL, it might point to a local file.
-    # For tests, we might want to override settings to use a test DB.
-    # pyrefly: ignore [missing-import]
-    from src.core.config import settings
-
-    settings.DATABASE_URL = "sqlite+aiosqlite:///./data/test_documents.db"
-
-    if os.path.exists("./data/test_documents.db"):
-        try:
-            os.remove("./data/test_documents.db")
-        except OSError:
-            pass
-
-    asyncio.run(init_db())
     yield
-    if os.path.exists("./data/test_documents.db"):
-        pass  # Keep it for debugging or delete it
-        # os.remove("./data/test_documents.db")
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+
+    from src.api.dependencies import get_doc_service, get_rag_service
+
+    # Mock init_db to prevent connecting to actual postgres
+    monkeypatch.setattr("src.main.init_db", AsyncMock())
+
+    # Create mock services
+    mock_doc_service = MagicMock()
+    mock_doc_service.get_document = AsyncMock(return_value=None)
+    mock_doc_service.create_pending_document = AsyncMock(return_value={})
+    mock_doc_service.process_document = AsyncMock(return_value=None)
+
+    mock_rag_service = MagicMock()
+    mock_rag_service.search = AsyncMock(return_value=[])
+    mock_rag_service.answer = AsyncMock(return_value={"answer": "mock"})
+    mock_rag_service.index_document = AsyncMock(return_value=None)
+
+    app.dependency_overrides[get_doc_service] = lambda: mock_doc_service
+    app.dependency_overrides[get_rag_service] = lambda: mock_rag_service
+
     with TestClient(app) as c:
         yield c
 
+    app.dependency_overrides.clear()
+
 
 @pytest.fixture
-def mock_gemini_structured_data():
-    # pyrefly: ignore [missing-import]
-    from src.models.invoice import Product, StructuredInvoice
+def mock_vlm_structured_data():
+    from src.models.documents import Product, StructuredInvoice
 
     return StructuredInvoice(
         nazwa_sklepu="Test Shop",

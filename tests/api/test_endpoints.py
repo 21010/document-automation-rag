@@ -1,19 +1,13 @@
 import pytest
-from fastapi.testclient import TestClient
-
-# pyrefly: ignore [missing-import]
-from src.main import app
-
-client = TestClient(app)
 
 
-def test_health_endpoint():
+def test_health_endpoint(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert "components" in response.json()
 
 
-def test_upload_invalid_file():
+def test_upload_invalid_file(client):
     # Test with a .txt file
     files = {"file": ("test.txt", b"hello world", "text/plain")}
     response = client.post("/documents/upload", files=files)
@@ -21,14 +15,12 @@ def test_upload_invalid_file():
     assert "Invalid file type" in response.json()["detail"]
 
 
-def test_get_nonexistent_document():
+def test_get_nonexistent_document(client):
     response = client.get("/documents/invalid-id")
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_indexing_conflict():
-    # In a real test, we would mock the DB to have a 'queued' document
-    # For now, we just test the 404 for an unknown doc
+async def test_indexing_conflict(client):
     response = client.post("/documents/unknown-id/index")
     assert response.status_code == 404

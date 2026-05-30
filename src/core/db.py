@@ -1,17 +1,17 @@
 import os
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
 
-# pyrefly: ignore [missing-import]
 from src.core.config import settings
 
-# Ensure data directory exists
 os.makedirs("data", exist_ok=True)
 
-engine = create_async_engine(settings.DATABASE_URL, echo=False)
-# pyrefly: ignore [no-matching-overload]
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+if not settings.POSTGRES_URL:
+    raise ValueError("POSTGRES_URL must be set in the environment or config.")
+
+engine = create_async_engine(settings.POSTGRES_URL, echo=False)
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
@@ -24,5 +24,8 @@ async def get_db():
 
 
 async def init_db():
+    from sqlalchemy import text
+
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)

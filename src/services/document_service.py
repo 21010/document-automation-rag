@@ -1,12 +1,9 @@
 import logging
-import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from src.core.constants import DocumentStatus
-from src.core.db import AsyncSessionLocal
 from src.core.processors.vlm import VLMProcessor
 from src.models.sql_models import SQLDocument
 
@@ -14,11 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentService:
-    def __init__(self):
+    def __init__(self, session_factory):
+        self.session_factory = session_factory
         self.vlm_processor = VLMProcessor()
 
     async def process_document(self, document_id: str, file_path: str):
-        async with AsyncSessionLocal() as session:
+        async with self.session_factory() as session:
             doc = await session.get(SQLDocument, document_id)
             if doc:
                 doc.status = DocumentStatus.PROCESSING
@@ -47,14 +45,14 @@ class DocumentService:
                     await session.commit()
 
     async def create_pending_document(self, document_id: str, filename: str) -> dict:
-        async with AsyncSessionLocal() as session:
+        async with self.session_factory() as session:
             doc = SQLDocument(id=document_id, filename=filename, status=DocumentStatus.QUEUED)
             session.add(doc)
             await session.commit()
             return {"document_id": document_id, "status": DocumentStatus.QUEUED}
 
     async def get_document(self, document_id: str) -> dict | None:
-        async with AsyncSessionLocal() as session:
+        async with self.session_factory() as session:
             stmt = select(SQLDocument).where(SQLDocument.id == document_id)
             result = await session.execute(stmt)
             doc = result.scalar_one_or_none()

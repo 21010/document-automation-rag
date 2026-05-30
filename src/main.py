@@ -3,16 +3,9 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
-# pyrefly: ignore [missing-import]
 from src.api.health_router import router as health_router
-
-# pyrefly: ignore [missing-import]
 from src.api.routes import router
-
-# pyrefly: ignore [missing-import]
 from src.core.config import settings
-
-# pyrefly: ignore [missing-import]
 from src.core.db import init_db
 
 

@@ -3,33 +3,32 @@ from functools import lru_cache
 
 from fastapi import APIRouter, Depends
 
-# pyrefly: ignore [missing-import]
 from src.core.config import settings
-
-# pyrefly: ignore [missing-import]
-from src.core.llm.gemini_service import GeminiService
+from src.core.llm.base import LLMService
 
 router = APIRouter()
 
 
 @lru_cache
-def get_gemini_service() -> GeminiService:
-    """Singleton GeminiService for health checks — avoids re-initializing on every poll."""
-    return GeminiService()
+def get_llm_service() -> LLMService:
+    """Singleton LLMService for health checks — avoids re-initializing on every poll."""
+    from src.core.llm.factory import get_llm_service as factory_get_llm
+
+    return factory_get_llm()
 
 
 @router.get(
     "/health",
     summary="Health Check",
-    description="Verifies the operational status of the API and its connection to the Gemini SDK.",
+    description="Verifies the operational status of the API and its connection to the LLM backend.",
 )
-def health_check(gemini: GeminiService = Depends(get_gemini_service)):
+def health_check(llm: LLMService = Depends(get_llm_service)):
     return {
         "status": "ok",
         "timestamp": datetime.now().isoformat(),
         "project": settings.PROJECT_NAME,
         "components": {
             "api": "ready",
-            "gemini_sdk": "ready" if gemini.client is not None else "not_configured",
+            "llm_backend": "configured" if getattr(llm, "base_url", None) else "not_configured",
         },
     }

@@ -8,7 +8,7 @@ from src.core.config import settings
 from src.core.constants import DocumentType
 from src.core.llm.base import LLMService
 from src.core.llm.prompts import ROUTER_PROMPT, get_prompt_for_type
-from src.models.invoice import StructuredDocument, StructuredInvoice, get_model_for_type
+from src.models.documents import StructuredDocument, get_model_for_type
 
 logger = logging.getLogger(__name__)
 
@@ -18,18 +18,24 @@ class OpenAIService(LLMService):
         self.base_url = settings.OPENAI_BASE_URL.rstrip("/")
         self.api_key = settings.OPENAI_API_KEY
         self.gen_model = settings.OPENAI_GENERATIVE_MODEL
+
+        self.embed_base_url = settings.OPENAI_EMBEDDING_BASE_URL.rstrip("/")
+        self.embed_api_key = settings.OPENAI_EMBEDDING_API_KEY
         self.embed_model = settings.OPENAI_EMBEDDING_MODEL
+
         logger.info(
-            f"Initialized OpenAIService. URL: {self.base_url}, Model: {self.gen_model}"
+            f"Initialized OpenAIService. VLM URL: {self.base_url}, Model: {self.gen_model}. "
+            f"Embed URL: {self.embed_base_url}, Model: {self.embed_model}"
         )
 
-    def _get_headers(self) -> dict:
+    def _get_headers(self, for_embedding: bool = False) -> dict:
         headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        api_key = self.embed_api_key if for_embedding else self.api_key
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
         return headers
 
-    def _call_generate(self, prompt: str, base64_image: str | None = None) -> str:
+    async def _call_generate(self, prompt: str, base64_image: str | None = None) -> str:
         """Call OpenAI-compatible /chat/completions endpoint."""
         url = f"{self.base_url}/chat/completions"
 
@@ -59,21 +65,21 @@ class OpenAIService(LLMService):
         }
 
         try:
-            with httpx.Client(timeout=600.0) as client:
-                response = client.post(url, headers=self._get_headers(), json=payload)
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                response = await client.post(url, headers=self._get_headers(), json=payload)
                 response.raise_for_status()
                 return response.json()["choices"][0]["message"]["content"]
         except Exception as e:
             logger.error(f"Error calling OpenAI API: {e}")
             return ""
 
-    def get_structured_data(self, text: str, doc_type: DocumentType = DocumentType.UNKNOWN) -> StructuredDocument:
+    async def get_structured_data(self, text: str, doc_type: DocumentType = DocumentType.UNKNOWN) -> StructuredDocument:
         TargetModel = get_model_for_type(doc_type)
         schema_json = json.dumps(TargetModel.model_json_schema(), indent=2)
         base_prompt = get_prompt_for_type(doc_type, schema_json)
         prompt = f"{base_prompt}\n\nDocument text:\n{text}\n\nOutput only JSON."
 
-        content = self._call_generate(prompt)
+        content = await self._call_generate(prompt)
 
         try:
             if "```json" in content:
@@ -84,18 +90,16 @@ class OpenAIService(LLMService):
             data = json.loads(content)
             return TargetModel(**data)
         except Exception as e:
-            logger.error(
-                f"Error parsing JSON from OpenAI structuring: {e}. Raw content: {content}"
-            )
+            logger.error(f"Error parsing JSON from OpenAI structuring: {e}. Raw content: {content}")
             return TargetModel()
 
-    def get_embeddings(self, texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
-        url = f"{self.base_url}/embeddings"
+    async def get_embeddings(self, texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
+        url = f"{self.embed_base_url}/embeddings"
         payload = {"model": self.embed_model, "input": texts}
 
         try:
-            with httpx.Client(timeout=60.0) as client:
-                response = client.post(url, headers=self._get_headers(), json=payload)
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(url, headers=self._get_headers(for_embedding=True), json=payload)
                 response.raise_for_status()
 
                 # OpenAI format returns a list of data objects
@@ -107,7 +111,7 @@ class OpenAIService(LLMService):
             logger.error(f"Error calling OpenAI embed API: {e}")
             raise
 
-    def extract_from_vision(
+    async def extract_from_vision(
         self, image_path: str, doc_type: DocumentType = DocumentType.UNKNOWN
     ) -> tuple[str, StructuredDocument]:
         TargetModel = get_model_for_type(doc_type)
@@ -131,7 +135,7 @@ class OpenAIService(LLMService):
             [The JSON object here]
             """
 
-            content = self._call_generate(prompt, base64_image=b64_image)
+            content = await self._call_generate(prompt, base64_image=b64_image)
 
             raw_text = ""
             structured_data = TargetModel()
@@ -155,9 +159,9 @@ class OpenAIService(LLMService):
             logger.error(f"Error during OpenAI Vision extraction: {e}")
             return str(e), TargetModel()
 
-    def route_query(self, query: str) -> dict:
+    async def route_query(self, query: str) -> dict:
         prompt = f"{ROUTER_PROMPT.format(query=query)}\n\nOutput only JSON."
-        content = self._call_generate(prompt)
+        content = await self._call_generate(prompt)
 
         try:
             if "```json" in content:
@@ -170,7 +174,7 @@ class OpenAIService(LLMService):
             logger.error(f"Routing error: {e}. Raw content: {content}")
             return {"route": "vector"}
 
-    def generate_answer(self, query: str, context: str) -> str:
+    async def generate_answer(self, query: str, context: str) -> str:
         prompt = f"""
         You are a helpful assistant specialized in processing invoices and documents.
         Answer the following query based ONLY on the provided context.
@@ -182,4 +186,4 @@ class OpenAIService(LLMService):
         {context}
         """
 
-        return self._call_generate(prompt)
+        return await self._call_generate(prompt)

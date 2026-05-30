@@ -1,17 +1,9 @@
-import asyncio
 import logging
 import time
 
-# pyrefly: ignore [missing-import]
 from src.core.classifier import DocumentClassifier
-
-# pyrefly: ignore [missing-import]
 from src.core.constants import DocumentType
-
-# pyrefly: ignore [missing-import]
 from src.core.llm.factory import get_llm_service
-
-# pyrefly: ignore [missing-import]
 from src.core.processors.base import DocumentProcessor, ProcessingResult
 
 logger = logging.getLogger(__name__)
@@ -19,21 +11,19 @@ logger = logging.getLogger(__name__)
 
 class VLMProcessor(DocumentProcessor):
     def __init__(self):
-        self.gemini = get_llm_service()
+        self.llm = get_llm_service()
         self.classifier = DocumentClassifier()
 
     async def process(self, file_path: str) -> ProcessingResult:
         start_total = time.time()
 
-        # Gemini Vision Timing — run in thread pool to avoid blocking the event loop
+        # VLM Timing
         start_vlm = time.time()
-        text, structured_data = await asyncio.to_thread(
-            self.gemini.extract_from_vision, file_path, DocumentType.UNKNOWN
-        )
+        text, structured_data = await self.llm.extract_from_vision(file_path, DocumentType.UNKNOWN)
         duration_vlm = time.time() - start_vlm
-        logger.info(f"VLM Processor: Gemini Vision completed in {duration_vlm:.2f}s")
+        logger.info(f"VLM Processor: Extraction completed in {duration_vlm:.2f}s")
 
-        # Classification Timing (usually instant as it uses the vision text)
+        # Classification Timing
         start_cls = time.time()
         doc_type = self.classifier.classify(text)
         duration_cls = time.time() - start_cls
@@ -49,6 +39,6 @@ class VLMProcessor(DocumentProcessor):
                 "vlm_duration": duration_vlm,
                 "cls_duration": duration_cls,
                 "total_duration": total_duration,
-                "source": "Gemini Vision",
+                "source": "OpenAI VLM",
             },
         )

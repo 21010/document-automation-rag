@@ -1,226 +1,163 @@
-# RAG Invoice Processing API
+# Document Automation RAG API
 
-A document intelligence platform that transforms raw invoice, receipt or forms images into searchable, structured insights using a multi-phase AI pipeline.
+## Purpose
 
-## Key Features
-
-- **Model-Agnostic VLM Extraction**: Built-in support for both Google Gemini Vision (Cloud) and any OpenAI-compatible endpoints (e.g., local Ollama, vLLM) for end-to-end Image-to-JSON parsing.
-- **Advanced RAG Engine**:
-  - **Hybrid Query Routing**: LLM-based router that chooses between SQL, Vector, or Hybrid search.
-  - **Semantic Chunking**: Intelligent chunking based on document logic (Header, Line Items, Totals).
-  - **Metadata-Aware Indexing**: Pre-filtering support in Qdrant using SQL-aligned payloads.
-- **Hybrid Persistence**:
-  - **SQLite (SQL)**: Deterministic storage for structured data, line items, and audit trails.
-  - **Qdrant (Vector)**: Semantic storage for context-aware Retrieval-Augmented Generation.
-- **Enterprise-Ready Infrastructure**:
-  - **FastAPI**: Fully asynchronous, non-blocking API with background task orchestration.
-  - **Multi-Stage Docker**: Highly optimized image using `uv` and slim runtimes.
+The **Document Automation RAG API** is a document intelligence platform designed to completely automate the processing of unstructured documents (such as invoices, receipts, and forms). By leveraging Vision-Language Models (VLMs) and Retrieval-Augmented Generation (RAG), the system extracts raw text and highly structured metadata from document images. This allows users to easily index, semantically search, and query their documents through natural language, transforming a pile of messy images into an easily navigable knowledge base.
 
 ---
 
-## 🏗️ Architecture (SOLID & CUPID)
+## Architecture & Structure
 
-- **Strategy Pattern**: Extensible document processors via `DocumentProcessor` base class.
-- **Dependency Inversion**: Clean service layers that depend on abstractions, ensuring testability.
-- **Unix Philosophy**: Modular components for LLM, VectorDB, and SQL.
+This project follows SOLID principles, employing a modular, decoupled architecture focused on extensibility and asynchronous performance.
 
----
+### The "Why" Behind Our Technology Stack
 
-## 📂 Project Structure
+- **OpenAI API Standard**: Rather than locking into a single LLM vendor, the platform speaks the universal OpenAI API schema. This allows seamless swapping between cutting-edge cloud models (like Groq or OpenAI) and local, privacy-first models (like Ollama or vLLM) without changing a single line of application code.
+- **Pydantic**: Used for strict, programmatic schema validation. It ensures the Vision-Language Model strictly adheres to our required data schemas (e.g., extracting specific `VAT` or `buyer` fields), automatically preventing hallucinations and safely parsing LLM outputs into native Python objects.
+- **PostgreSQL & pgvector**: True hybrid persistence. Rather than splitting structured metadata into an SQL database and vector embeddings into a separate Vector DB (like Qdrant), I consolidated everything into PostgreSQL. The `pgvector` extension allows storing structured relational data, audit trails, and semantic embeddings in a single, ACID-compliant, deterministic database.
+- **FastAPI & uv**: FastAPI provides a lightning-fast, fully asynchronous, non-blocking HTTP framework, meaning heavy LLM I/O operations don't freeze the server. `uv` is utilized for modern, incredibly fast Python dependency management and deterministic environment resolution.
+
+### Application Structure
 
 ```text
-.
-├── src/
-│   ├── api/            # Routes, Schemas, Dependencies, Health
-│   ├── core/
-│   │   ├── llm/        # Gemini SDK, Specialized Prompts
-│   │   ├── processors/ # VLMProcessor
-│   │   ├── rag/        # Optimized RAG Engine & Hybrid Router
-│   │   └── vector_db/  # Qdrant client & metadata-aware indexing
-│   ├── models/         # Pydantic (StructuredInvoice) & SQLAlchemy SQL models
-│   ├── services/       # Document & RAG service orchestrators
-│   └── main.py         # Entry point with Lifespan management
-├── tests/              # Unit, Integration, and API test suite
-├── Dockerfile          # Optimized multi-stage build
-├── .dockerignore       # Docker context governance file
-└── pyproject.toml      # Modern dependency management (uv)
+src/
+├── api/          # HTTP layer (FastAPI endpoints, routers, dependencies)
+├── core/         # Core business logic (DB engine, LLM clients, configuration, processors)
+├── models/       # Data layer (Pydantic schemas and SQLAlchemy models)
+└── services/     # Orchestration layer (RAG logic and document pipeline coordination)
+```
+
+### API Endpoints
+
+- `GET /health` - Verifies the operational status of the API and its connection to the LLM backend.
+- `POST /documents/upload` - Accepts an image file (e.g., invoice/receipt), assigns a UUID, queues it, and begins background VLM extraction.
+- `GET /documents/{document_id}` - Retrieves the parsed text and structured JSON data for a specific processed document.
+- `POST /documents/{document_id}/index` - Chunks the extracted text (alongside its metadata) and embeds it into the PostgreSQL vector database.
+- `POST /rag/search` - Performs a semantic vector search across all indexed documents based on a query.
+- `POST /rag/answer` - End-to-end RAG workflow: Routes the query, retrieves context from pgvector, and generates a precise LLM answer based strictly on the retrieved documents.
+
+---
+
+## Prerequisites & Setup
+
+> **Important!** `docker-compose.yml` handles setting up the database and LLM endpoint automatically.
+> The default (in .env file) LLM endpoint is Ollama running on port `11434`.
+> The default database is PostgreSQL running on port `5432`.
+> Default model for VLM is `llama3-vision`.
+> Default model for text embedding is `nomic-embed-text`.
+> You can change the database and LLM endpoint in the .env file.
+> **Note**: In `docker-compose.yml`, if the LLM endpoint is set to `http://ollama:11434`, the hostname `ollama` is resolvable because it is the name of the service defined in the `docker-compose.yml` file itself. This allows the application container to communicate with the Ollama container using the internal Docker network.
+
+Before running the application, ensure the external dependencies are accessible:
+1. **Database**: A running instance of PostgreSQL with the `pgvector` extension installed.
+2. **LLM Endpoint**: Access to an OpenAI-compatible API endpoint (either a local server like Ollama, or a cloud provider like Groq/OpenAI).
+
+### Environment Configuration
+
+Copy the example environment file and configure it:
+
+```bash
+cp .env.example .env
+```
+
+Your `.env` file should look similar to this:
+```env
+# Fastapi/App Config
+PROJECT_NAME="Document Automation RAG API"
+
+# Database Config
+POSTGRES_URL="postgresql+asyncpg://user:password@localhost:5432/rag_db"
+
+# LLM Generation Config (VLM / QA)
+OPENAI_BASE_URL="http://localhost:11434/v1"
+OPENAI_API_KEY="sk-dummy"
+GEN_MODEL="llama3-vision"
+
+# LLM Embedding Config
+OPENAI_EMBEDDING_BASE_URL="http://localhost:11434/v1"
+OPENAI_EMBEDDING_API_KEY="sk-dummy"
+EMBED_MODEL="nomic-embed-text"
 ```
 
 ---
 
-## 📡 API Specification
+## Execution Guide
 
-| Method | Endpoint | Status | Description |
-|--------|----------|--------|-------------|
-| `GET`  | `/health` | `200 OK` | Component-level readiness check |
-| `POST` | `/documents/upload` | `202 Accepted` | Upload document and trigger Native Vision-to-JSON mode |
-| `GET`  | `/documents/{id}` | `200 OK` / `404` | Full 10-field structured schema + line items |
-| `POST` | `/documents/{id}/index` | `200 OK` / `409` | Triggers Metadata-Aware indexing |
-| `POST` | `/rag/search` | `200 OK` | Semantic search over indexed chunks |
-| `POST` | `/rag/answer` | `200 OK` | Smart routing: SQL/Vector/Hybrid response with sources |
+You can run the application using three different methods, depending on your environment.
 
----
-
-## 🚀 How to Run the Application (4 Options)
-
-The application is highly flexible and can be run in four distinct ways depending on your environment and API preferences.
-
-### Option 1: Using `uv` (Local Development)
-
+### Option 1: Local Development (Using `uv`)
 Best for active development. Runs directly on your host machine without containers.
 
 ```bash
-# 1. Install dependencies using uv
+# 1. Install dependencies
 uv sync
 
-# 2. Configure environment
-cp .env.example .env          # then add your GEMINI_API_KEY
-
-# 3. Run the development server
+# 2. Run the asynchronous development server
 uv run python -m src.main
-
-# 4. Run the test suite
-uv run pytest tests/
 ```
 
-### Option 2: Using Docker (with GEMINI_API_KEY)
+### Option 2: Full Infrastructure (Using `docker-compose`)
+Best for a "one-click" deployment. This spins up the API, the PostgreSQL database, and a local Ollama LLM instance automatically.
 
-Best for production-like testing using the cloud Gemini Vision API.
+> **Note**: It's recommended to use local LLM for embeddings to avoid API costs and rate limits and cloud or larger local VLM for vision-language model tasks.
+
+```bash
+# Start all services in detached mode
+docker-compose up --build -d
+
+# View API logs
+docker-compose logs -f rag-invoice-api
+```
+
+### Option 3: Manual Container Deployment (Using `Dockerfile`)
+Best if you already have external databases/LLMs and just want to host the API in an isolated container.
 
 ```bash
 # 1. Build the image
-docker build -t rag-invoice-api:latest .
+docker build -t doc-auto-api:latest .
 
-# 2. Run the container
+# 2. Run the container, linking to your external services
 docker run -d \
-  --name rag-invoice-api \
+  --name doc-auto-api \
   -p 8000:8000 \
-  -e GEMINI_API_KEY=your_gemini_api_key_here \
-  -v $(pwd)/data:/app/data \
-  rag-invoice-api:latest
+  --env-file .env \
+  doc-auto-api:latest
 ```
-
-### Option 3: Using Docker (without GEMINI_API_KEY)
-
-Best for using a separate, pre-existing local model (like LM Studio, vLLM, or Groq) using the OpenAI API standard.
-
-```bash
-# 1. Build the image
-docker build -t rag-invoice-api:latest .
-
-# 2. Run the container and point it to your local API
-docker run -d \
-  --name rag-invoice-api \
-  -p 8000:8000 \
-  -e OPENAI_BASE_URL=http://host.docker.internal:11434/v1 \
-  -v $(pwd)/data:/app/data \
-  rag-invoice-api:latest
-```
-*(Note: Use `host.docker.internal` to allow the container to reach an API running on your host machine.)*
-
-### Option 4: Using Docker Compose (App + Local Ollama)
-
-Best for a fully self-contained local stack. This automatically spins up both the API and a local Ollama container. It uses a dedicated init container to automatically download `llama3.2-vision` and `nomic-embed-text`. If `GEMINI_API_KEY` is not provided in your `.env`, it automatically falls back to the local Ollama container.
-
-```bash
-# 1. Start the environment (builds API, starts Ollama, pulls models automatically)
-docker-compose up -d --build
-
-# 2. View logs
-docker-compose logs -f
-
-# 3. Tear down
-docker-compose down
-```
-
-After starting any of the options above, access the API Swagger UI at: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ---
 
-## 🐳 Docker — Concepts & Build Guide
+## DevOps & Infrastructure Guide
 
-This section explains the Docker concepts required to build and run this project in a container.
+This project is built with production-grade containerization strategies. Understanding how the `Dockerfile` is structured is key to extending the infrastructure.
 
-### What is a `Dockerfile`?
+### Core Docker Concepts
+- **Dockerfile**: A plain-text recipe of instructions that Docker uses to assemble a reproducible, isolated filesystem (an "image") containing the application and all its dependencies.
+- **.dockerignore**: Similar to `.gitignore`, this file dictates which local files/folders should NOT be sent to the Docker daemon. Excluding directories like `.venv/` or large `data/` folders keeps the build process fast and the image lightweight.
+- **Docker Context**: The set of files located in the specified path (usually `.`) when you invoke `docker build`. The Docker daemon packs this entire context into an archive before building. Minimizing the context (using `.dockerignore`) is crucial for speed.
 
-A `Dockerfile` is a plain-text blueprint that contains a series of instructions telling Docker how to assemble a container image. Each instruction (e.g., `FROM`, `RUN`, `COPY`, `CMD`) adds a new **layer** to the image. When Docker executes a `Dockerfile`, it runs each instruction in sequence, producing a deterministic, reproducible environment that can be shipped and executed identically on any machine that has Docker installed.
+### Image Layers Under the Hood
+Every command (`FROM`, `RUN`, `COPY`) in a `Dockerfile` creates a new, read-only "layer" that sits on top of the previous one. Docker caches these layers. When you rebuild an image, Docker reuses cached layers until it hits an instruction where the files or commands have changed. Once a layer cache is invalidated, all subsequent layers are rebuilt from scratch.
 
-Think of it as a recipe: just as a recipe lists the exact ingredients and steps to produce a dish, a `Dockerfile` lists the exact OS dependencies, packages, and application files needed to run your software.
+### Caching Performance & Instruction Order
+Because of the "first-change-invalidates-all" rule, the order of instructions in our `Dockerfile` dictates our caching performance. 
 
-### What is `.dockerignore`?
-
-`.dockerignore` is a context-filtering file (analogous to `.gitignore`) that controls which files and directories are **sent to the Docker daemon** when you run `docker build`. Before Docker begins executing `Dockerfile` instructions, it packages the current directory into a **build context** — a tarball sent over the local socket (or network) to the daemon.
-
-Without `.dockerignore`, this tarball includes everything: `.git/`, `.venv/`, test fixtures, and local databases — potentially hundreds of megabytes of irrelevant data. `.dockerignore` lets you declare what to exclude, so only the minimum necessary files are sent. This has two critical effects:
-
-1. **Smaller context** → faster transfer to the daemon and faster builds.
-2. **Correctness** → prevents local artifacts (e.g., a pre-existing `.venv`) from shadowing the files installed inside the image.
-
-This project's `.dockerignore` excludes `.git`, `.venv`, `__pycache__`, `data/uploads/*`, test files, and documentation, while intentionally keeping `pyproject.toml` and `uv.lock` which the builder stage needs.
-
-### What is Docker Context?
-
-The **build context** is the set of files available to Docker during a `docker build` operation. When you run:
-
-```bash
-docker build -t my-image .
-```
-
-The `.` refers to the build context directory. Docker packages all files in that directory (minus `.dockerignore` exclusions) and sends them to the Docker daemon. Instructions like `COPY` in your `Dockerfile` can only access files that are part of this context — they cannot reach outside it.
-
-This means two things matter for context governance:
-
-- **Path**: The context path determines the root of available files. Using `./` limits scope to the project directory.
-- **Exclusions**: `.dockerignore` is your primary tool for shrinking the context to only what's needed.
-
-### How Docker Image Layers Work
-
-Every instruction in a `Dockerfile` that modifies the filesystem (`RUN`, `COPY`, `ADD`) creates a new **immutable layer**. Each layer stores only the **diff** relative to the previous layer — similar to a git commit.
-
-```
-Layer 0: FROM python:3.13-slim   →  Base OS filesystem
-Layer 1: RUN apt-get install ... →  +libgl1, +libglib2.0-0
-Layer 2: COPY pyproject.toml ... →  +dependency files
-Layer 3: RUN uv sync --frozen    →  +Python packages in .venv
-Layer 4: COPY src/ /app/src/     →  +application source code
-Layer 5: CMD [...]               →  Metadata only (no filesystem change)
-```
-
-Layers are content-addressed and **cached by Docker**. When you rebuild:
-- If a layer's inputs have not changed, Docker reuses the cached layer (near-instant).
-- If a layer changes, that layer and **all subsequent layers** are invalidated and rebuilt.
-
-Layers are also shared across images: if two images share the same base (`python:3.13-slim`), Docker stores that layer only once on disk.
-
-### Best Practices for Optimizing Image Build Time
-
-1. **Order instructions from least-to-most-frequently-changed**: Put `apt-get install` before `COPY` so system libraries are cached across code changes.
-2. **Use multi-stage builds**: Separate heavy build-time tools (compilers, build-essential) from the lean runtime image. This project's `Dockerfile` uses a `builder` stage with `uv sync` and a minimal runtime stage that only copies the `.venv`.
-3. **Minimize layers**: Chain related `RUN` commands with `&&` to avoid creating separate layers for each command.
-4. **Clean up in the same layer**: Run `rm -rf /var/lib/apt/lists/*` in the same `RUN` as `apt-get install` — cleaning up in a later layer does not reduce image size because the files still exist in the earlier layer.
-5. **Use a `.dockerignore`**: Prevents bloated contexts that slow down build initiation.
-6. **Pin exact versions**: `uv sync --frozen` ensures reproducible builds from `uv.lock`, preventing non-deterministic dependency resolution.
-7. **Use slim base images**: `python:3.13-slim` instead of `python:3.13` removes ~800MB of unneeded development tools.
-
-### Why Instruction Order in a `Dockerfile` Dictates Caching Performance
-
-Docker's layer cache works on a **first-change-invalidates-all rule**: if any instruction changes, Docker cannot reuse that layer or any layer below it. This means instruction order is a **caching strategy**, not just a stylistic choice.
-
-**Bad ordering (cache-inefficient):**
+**Bad ordering (Cache-inefficient):**
 ```dockerfile
 COPY . /app/          # Copies ALL code — changes on every git commit
 RUN uv sync --frozen  # Cache invalidated every commit — re-downloads all packages!
 ```
 
-**Optimized ordering (as in this project):**
+**Optimized ordering (Our approach):**
 ```dockerfile
-COPY pyproject.toml uv.lock ./  # Only changes when deps change (rarely)
-RUN uv sync --frozen             # Cache hit on every non-dep code change
-COPY src/ /app/src/              # Changes on every commit — but no slow step follows
+COPY pyproject.toml uv.lock ./   # Only changes when dependencies change
+RUN uv sync --frozen             # Cache hit on every normal code change
+COPY src/ /app/src/              # Changes on every commit, but no slow steps follow
 ```
+By placing slowly changing files (`pyproject.toml`) and heavy installations (`uv sync`) at the top, and rapidly changing files (source code) at the bottom, we turn a 3-minute deployment into a ~5-second rebuild during active development.
 
-By copying only the dependency manifest files first and running `uv sync` before copying application code, the expensive package installation step is cached for every commit that does not change `pyproject.toml` or `uv.lock`. This turns a 3–5 minute build into a ~10 second rebuild during iterative development.
+### Optimizing Image Build Time (Multi-Stage Builds)
+Our `Dockerfile` utilizes a **Multi-Stage Build** pattern:
+1. **Stage 1 (Builder)**: Uses a heavier image. It installs system compilers (like `build-essential`) and the `uv` package manager to compile the Python virtual environment (`.venv`).
+2. **Stage 2 (Runtime)**: Starts fresh from a pristine, lightweight `python-slim` base image. It copies only the compiled `.venv` from the Builder stage. 
 
-
-
-
+This guarantees that our final production image contains no unnecessary compilers or cache files, drastically reducing the image size and shrinking the security attack surface.

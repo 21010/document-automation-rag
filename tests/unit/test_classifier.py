@@ -1,7 +1,4 @@
-# pyrefly: ignore [missing-import]
 from src.core.classifier import DocumentClassifier
-
-# pyrefly: ignore [missing-import]
 from src.core.constants import DocumentType
 
 

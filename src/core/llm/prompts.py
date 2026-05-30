@@ -1,4 +1,3 @@
-# pyrefly: ignore [missing-import]
 from src.core.constants import DocumentType
 
 DEFAULT_EXTRACTION_PROMPT = """
@@ -29,7 +28,7 @@ If specific line items aren't present, use the 'lista_produktow' to store key fi
 
 def get_prompt_for_type(doc_type: DocumentType, schema_json: str) -> str:
     extraction_part = DEFAULT_EXTRACTION_PROMPT.format(schema_json=schema_json)
-    
+
     match doc_type:
         case DocumentType.INVOICE:
             return INVOICE_PROMPT + extraction_part
@@ -48,16 +47,18 @@ You have two tools:
 2. VECTOR: For questions about concepts, contents, descriptions, or "what" questions.
 
 Analyze the query and respond with a JSON object:
-{
+{{
     "route": "sql" | "vector" | "hybrid",
     "reasoning": "string",
-    "sql_metadata_filter": {
+    "sql_metadata_filter": {{
+        "buyer": "string or null",
         "vendor": "string or null",
         "min_amount": float or null,
         "max_amount": float or null,
+        "date_before": "string or null",
         "date_after": "string or null"
-    }
-}
+    }}
+}}
 
 Query: {query}
 """

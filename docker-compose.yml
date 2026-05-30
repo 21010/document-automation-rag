@@ -5,7 +5,6 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      # Map the host's existing Ollama models so we don't have to re-download them
       - ~/.ollama:/root/.ollama
     networks:
       - rag-net
@@ -17,11 +16,26 @@ services:
     environment:
       - OLLAMA_HOST=http://ollama:11434
     entrypoint: /bin/sh
-    command: -c "sleep 5 && ollama pull llama3.2-vision && ollama pull nomic-embed-text"
+    command: -c "while ! ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull llama3.2-vision && ollama pull nomic-embed-text"
     depends_on:
       - ollama
     networks:
       - rag-net
+
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg18-trixie
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=rag_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - rag-net
+    restart: unless-stopped
 
   rag-invoice-api:
     build: .
@@ -29,16 +43,26 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - OPENAI_BASE_URL=http://ollama:11434/v1
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://ollama:11434/v1}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_GENERATIVE_MODEL=${OPENAI_GENERATIVE_MODEL:-llama3.2-vision}
+      - OPENAI_EMBEDDING_BASE_URL=${OPENAI_EMBEDDING_BASE_URL:-http://ollama:11434/v1}
+      - OPENAI_EMBEDDING_API_KEY=${OPENAI_EMBEDDING_API_KEY:-}
+      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-nomic-embed-text}
+      - POSTGRES_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/rag_db
     volumes:
       - ./data:/app/data
     networks:
       - rag-net
     depends_on:
+      postgres:
+        condition: service_started
       ollama-pull:
         condition: service_completed_successfully
     restart: unless-stopped
+
+volumes:
+  postgres_data:
 
 networks:
   rag-net:

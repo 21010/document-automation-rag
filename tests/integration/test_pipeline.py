@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -7,14 +7,31 @@ from src.services.document_service import DocumentService
 
 
 @pytest.mark.asyncio
-async def test_full_pipeline_flow(mock_gemini_structured_data):
-    # Setup service with mocks
-    service = DocumentService()
+async def test_full_pipeline_flow(mock_vlm_structured_data):
+    mock_doc = MagicMock()
+    mock_doc.status = DocumentStatus.COMPLETED
+    mock_doc.raw_text = "Invoice text"
+    mock_doc.doc_type = "Invoice"
+    mock_doc.structured_data = {"nazwa_sklepu": "Test Shop"}
+    mock_doc.filename = "test.jpg"
+    mock_doc.processing_mode = "vlm"
+    mock_doc.created_at = None
+    mock_doc.completed_at = None
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_doc
+
+    mock_session = AsyncMock()
+    mock_session.get.return_value = mock_doc
+    mock_session.execute.return_value = mock_result
+    mock_session.add = MagicMock()
+    mock_session.__aenter__.return_value = mock_session
+    mock_session_factory = MagicMock(return_value=mock_session)
+
+    service = DocumentService(session_factory=mock_session_factory)
 
     # Mock the processors
-    service.vlm_processor.gemini.extract_from_vision = MagicMock(
-        return_value=("Invoice text", mock_gemini_structured_data)
-    )
+    service.vlm_processor.llm.extract_from_vision = AsyncMock(return_value=("Invoice text", mock_vlm_structured_data))
 
     import uuid
 

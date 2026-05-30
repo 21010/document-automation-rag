@@ -1,9 +1,9 @@
 # Stage 1: Build
-FROM python:3.13-slim as builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
-# Install system dependencies needed during build (if any)
+# Install system dependencies needed during build
 RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -28,7 +28,6 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application code
 COPY src/ /app/src/
-COPY main.py /app/main.py
 
 # Create directory for uploads and ensure permissions
 RUN mkdir -p /app/data/uploads
