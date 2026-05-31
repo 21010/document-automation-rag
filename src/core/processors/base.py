@@ -2,18 +2,17 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from src.core.constants import DocumentType
-from src.models.documents import StructuredDocument
 
 
-class ProcessingResult:
-    def __init__(self, text: str, structured_data: StructuredDocument, doc_type: DocumentType, raw_data: Any = None):
+class ProcessingResult[T]:
+    def __init__(self, text: str, structured_data: T, doc_type: DocumentType, raw_data: Any = None):
         self.text = text
         self.structured_data = structured_data
         self.doc_type = doc_type
         self.raw_data = raw_data
 
 
-class DocumentProcessor(ABC):
+class DocumentProcessor[T](ABC):
     @abstractmethod
-    async def process(self, file_path: str) -> ProcessingResult:
+    async def process(self, file_path: str) -> ProcessingResult[T]:
         pass

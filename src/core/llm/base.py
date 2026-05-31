@@ -17,7 +17,7 @@ class LLMService(Protocol):
 
     async def extract_from_vision(
         self, image_path: str, doc_type: DocumentType = DocumentType.UNKNOWN
-    ) -> tuple[str, StructuredDocument]:
+    ) -> tuple[str, StructuredDocument, dict]:
         """Extract raw text and structured data from an image."""
         ...
 

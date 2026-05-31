@@ -27,7 +27,7 @@ class RAGEngine:
         for key, value in structured_data.items():
             if value is not None and not isinstance(value, list):
                 # Clean up the key to be more readable
-                clean_key = key.replace('_', ' ').capitalize()
+                clean_key = key.replace("_", " ").capitalize()
                 header_lines.append(f"{clean_key}: {value}")
         chunks.append("\n".join(header_lines))
 
@@ -38,7 +38,7 @@ class RAGEngine:
                 [f"- {i.get('name')}: {i.get('total_price') or i.get('unit_price') or ''}" for i in items]
             )
             chunks.append(item_text)
-            
+
         form_fields = structured_data.get("pola_formularza", [])
         if form_fields:
             form_text = f"[{doc_ref}]\nPola formularza (Form Fields):\n" + "\n".join(
@@ -75,10 +75,11 @@ class RAGEngine:
         route_type = routing_info.get("route", "vector")
         logger.info(f"Query routed to: {route_type}")
 
-        if route_type == "sql":
-            results = await self.search(query, metadata_filter=routing_info.get("sql_metadata_filter"))
-        else:
-            results = await self.search(query)
+        match route_type:
+            case "sql":
+                results = await self.search(query, metadata_filter=routing_info.get("sql_metadata_filter"))
+            case "vector" | _:
+                results = await self.search(query)
 
         if not results:
             return {"answer": "I couldn't find relevant information.", "sources": [], "route": route_type}

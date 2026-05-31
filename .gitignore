@@ -22,7 +22,6 @@ gemini.md
 
 # Security
 .env
-.env.*
 *.env
 
 # Data

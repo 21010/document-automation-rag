@@ -25,9 +25,12 @@ project-includes = ["**/*.py*", "**/*.ipynb"]
 [dependency-groups]
 dev = [
     "bandit>=1.9.4",
+    "datasets>=4.8.5",
+    "pillow>=12.2.0",
     "pyrefly>=1.0.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.15.15",
 ]
 

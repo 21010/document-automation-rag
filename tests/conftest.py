@@ -21,8 +21,13 @@ def client(monkeypatch):
     # Create mock services
     mock_doc_service = MagicMock()
     mock_doc_service.get_document = AsyncMock(return_value=None)
+    mock_doc_service.get_document_by_hash = AsyncMock(return_value=None)
     mock_doc_service.create_pending_document = AsyncMock(return_value={})
     mock_doc_service.process_document = AsyncMock(return_value=None)
+    mock_doc_service.list_documents = AsyncMock(return_value={"items": [], "total": 0})
+    mock_doc_service.update_document = AsyncMock(return_value=None)
+    mock_doc_service.delete_document = AsyncMock(return_value=False)
+    mock_doc_service.get_unindexed_completed_documents = AsyncMock(return_value=[])
 
     mock_rag_service = MagicMock()
     mock_rag_service.search = AsyncMock(return_value=[])

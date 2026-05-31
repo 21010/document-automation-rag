@@ -1,5 +1,12 @@
 # Document Automation RAG API
 
+![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-blue?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white)
+![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white)
+
 ## Purpose
 
 The **Document Automation RAG API** is a document intelligence platform designed to completely automate the processing of unstructured documents (such as invoices, receipts, and forms). By leveraging Vision-Language Models (VLMs) and Retrieval-Augmented Generation (RAG), the system extracts raw text and highly structured metadata from document images. This allows users to easily index, semantically search, and query their documents through natural language, transforming a pile of messy images into an easily navigable knowledge base.
@@ -25,14 +32,33 @@ src/
 ├── core/         # Core business logic (DB engine, LLM clients, configuration, processors)
 ├── models/       # Data layer (Pydantic schemas and SQLAlchemy models)
 └── services/     # Orchestration layer (RAG logic and document pipeline coordination)
+tests/
+├── api/          # Endpoint tests
+├── evaluation/   # Automated evaluation suite (VLM Extraction and LLM Judge RAG metrics)
+├── integration/  # System integration tests
+└── unit/         # Unit tests for core logic
 ```
 
-### API Endpoints
+### API Endpoints & HTTP Status Codes
 
+The API strictly adheres to REST principles and utilizes specific HTTP status codes to communicate application states:
+- `200 OK`: Successful retrieval or completion of synchronous operations.
+- `202 Accepted`: Document accepted for asynchronous background processing.
+- `400 Bad Request`: Invalid file formats (only `.jpg`, `.jpeg`, `.png` allowed).
+- `404 Not Found`: Document ID does not exist in the database.
+- `409 Conflict`: Duplicate document upload, or attempting to index a document that hasn't finished processing.
+- `422 Unprocessable Entity`: Validation failures (e.g., trying to index a document that failed VLM extraction).
+- `500 Internal Server Error`: Unexpected downstream errors (e.g., VLM or VectorDB timeouts).
+
+#### Endpoints
 - `GET /health` - Verifies the operational status of the API and its connection to the LLM backend.
-- `POST /documents/upload` - Accepts an image file (e.g., invoice/receipt), assigns a UUID, queues it, and begins background VLM extraction.
-- `GET /documents/{document_id}` - Retrieves the parsed text and structured JSON data for a specific processed document.
+- `POST /documents/upload` - Accepts an image file, assigns a UUID, queues it (`202 Accepted`), and begins background VLM extraction.
+- `GET /documents` - Retrieves a paginated list of all uploaded documents.
+- `GET /documents/{document_id}` - Retrieves the processing status, structured JSON data, and parsed text for a specific document.
+- `PATCH /documents/{document_id}` - Updates the text, structured data, or status of an existing document.
+- `DELETE /documents/{document_id}` - Deletes a document and its embeddings from the database.
 - `POST /documents/{document_id}/index` - Chunks the extracted text (alongside its metadata) and embeds it into the PostgreSQL vector database.
+- `POST /documents/index:batch` - Finds all completed documents that have not been indexed yet, and indexes them in batch.
 - `POST /rag/search` - Performs a semantic vector search across all indexed documents based on a query.
 - `POST /rag/answer` - End-to-end RAG workflow: Routes the query, retrieves context from pgvector, and generates a precise LLM answer based strictly on the retrieved documents.
 
@@ -77,6 +103,11 @@ GEN_MODEL="llama3-vision"
 OPENAI_EMBEDDING_BASE_URL="http://localhost:11434/v1"
 OPENAI_EMBEDDING_API_KEY="sk-dummy"
 EMBED_MODEL="nomic-embed-text"
+
+# Evaluation Judge LLM Config (Optional - used by evaluate_retrieval.py)
+JUDGE_LLM_BASE_URL="https://api.groq.com/openai/v1"
+JUDGE_LLM_API_KEY="gsk_dummy_key"
+JUDGE_LLM_MODEL="llama-3.1-70b-versatile"
 ```
 
 ---
@@ -96,7 +127,7 @@ uv sync
 uv run python -m src.main
 ```
 
-### Option 2: Full Infrastructure (Using `docker-compose`)
+### Option 2: Full Infrastructure (Using `docker-compose`) - **Recommended**
 Best for a "one-click" deployment. This spins up the API, the PostgreSQL database, and a local Ollama LLM instance automatically.
 
 > **Note**: It's recommended to use local LLM for embeddings to avoid API costs and rate limits and cloud or larger local VLM for vision-language model tasks.
@@ -122,6 +153,64 @@ docker run -d \
   -p 8000:8000 \
   --env-file .env \
   doc-auto-api:latest
+```
+
+---
+
+## Evaluation & Testing
+
+A critical component of this production-grade pipeline is the automated evaluation suite. Testing a non-deterministic LLM pipeline requires more than standard unit tests; it requires LLM-as-a-Judge grading and exact match parsing metrics.
+
+### Applied Metrics
+1. **Extraction Accuracy (Exact Match)**: The system parses complex JSON structures directly from images. We evaluate the core financial data (e.g., `kwota_koncowa` / `total_gross_worth`) by comparing our pipeline's numerical output against the dataset's ground truth.
+2. **Retrieval & Generation Quality (LLM Judge)**: We use an advanced LLM (e.g., LLaMA-4-Scout) acting as an impartial judge to grade the system's generated RAG answers. The judge evaluates whether the answer directly and accurately addresses the query using the retrieved context, assigning a binary `1` (Pass) or `0` (Fail).
+
+### Running the Evaluation Suite
+The project includes two primary evaluation scripts located in `tests/evaluation/`. They utilize a shared utility module (`eval_utils.py`) to automatically download a randomized subset of the `katanaml-org/invoices-donut-data-v1` dataset to perform live end-to-end testing.
+
+#### 1. VLM Extraction Evaluation
+This script tests the Vision-Language Model's ability to extract structured Pydantic data from raw invoice images.
+
+```bash
+uv run .\tests\evaluation\evaluate_extraction.py
+```
+
+*Real Result Example (100% Exact Match):*
+```json
+{
+  "nazwa_sklepu": "Lawrence LLC",
+  "data": "07/29/2018",
+  "kwota_koncowa": 482.25,
+  "VAT": 43.84
+}
+```
+```text
+==========================================
+EVALUATION SUMMARY
+==========================================
+Total Samples Processed : 5
+Successful Extractions  : 5
+Average Duration/Sample : 2.86s
+Exact Match (Amount)    : 5 / 5 (100.0%)
+==========================================
+```
+
+#### 2. RAG Retrieval Evaluation
+This script tests the Vector Database (pgvector) and the LLM routing/generation logic. It safely injects ground-truth documents into the database, runs a suite of challenging Polish queries, evaluates the results, and cleans up the database afterward.
+
+```bash
+uv run .\tests\evaluation\evaluate_retrieval.py
+```
+
+*Real Result Example (LLM Judge Evaluation):*
+```text
+--- Query: Czy na dokumencie występuje podatek? ---
+Route taken: vector
+System Answer: Tak, na dokumencie występuje podatek (VAT). Widoczne jest to w szczegółach produktów, gdzie dla każdego towaru określono stawkę VAT na poziomie 10%.
+
+LLM Judge Evaluation:
+GRADE: 1
+The System Answer provides a direct and meaningful response to the Query by confirming the presence of tax (VAT) on the document and providing additional details about the tax rates.
 ```
 
 ---

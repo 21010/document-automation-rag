@@ -11,6 +11,7 @@ class SQLDocument(Base):
 
     id = Column(String, primary_key=True)
     filename = Column(String)
+    file_hash = Column(String, unique=True, index=True, nullable=True)
     status = Column(String)
     doc_type = Column(String)
     raw_text = Column(Text)

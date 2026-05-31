@@ -26,3 +26,14 @@ class SearchRequest(BaseModel):
 class AnswerRequest(BaseModel):
     query: str
     limit: int = 3
+
+
+class DocumentListResponse(BaseModel):
+    items: list[DocumentResponse]
+    total: int
+
+
+class DocumentUpdateRequest(BaseModel):
+    text: str | None = None
+    structured_data: dict | None = None
+    status: DocumentStatus | None = None

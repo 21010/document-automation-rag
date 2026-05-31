@@ -14,10 +14,15 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIService(LLMService):
-    def __init__(self):
-        self.base_url = settings.OPENAI_BASE_URL.rstrip("/")
-        self.api_key = settings.OPENAI_API_KEY
-        self.gen_model = settings.OPENAI_GENERATIVE_MODEL
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        gen_model: str | None = None,
+    ):
+        self.base_url = (base_url or settings.OPENAI_BASE_URL).rstrip("/")
+        self.api_key = api_key or settings.OPENAI_API_KEY
+        self.gen_model = gen_model or settings.OPENAI_GENERATIVE_MODEL
 
         self.embed_base_url = settings.OPENAI_EMBEDDING_BASE_URL.rstrip("/")
         self.embed_api_key = settings.OPENAI_EMBEDDING_API_KEY
@@ -35,7 +40,7 @@ class OpenAIService(LLMService):
             headers["Authorization"] = f"Bearer {api_key}"
         return headers
 
-    async def _call_generate(self, prompt: str, base64_image: str | None = None) -> str:
+    async def _call_generate(self, prompt: str, base64_image: str | None = None) -> tuple[str, dict]:
         """Call OpenAI-compatible /chat/completions endpoint."""
         url = f"{self.base_url}/chat/completions"
 
@@ -68,10 +73,11 @@ class OpenAIService(LLMService):
             async with httpx.AsyncClient(timeout=600.0) as client:
                 response = await client.post(url, headers=self._get_headers(), json=payload)
                 response.raise_for_status()
-                return response.json()["choices"][0]["message"]["content"]
+                data = response.json()
+                return data["choices"][0]["message"]["content"], data.get("usage", {})
         except Exception as e:
             logger.error(f"Error calling OpenAI API: {e}")
-            return ""
+            return "", {}
 
     async def get_structured_data(self, text: str, doc_type: DocumentType = DocumentType.UNKNOWN) -> StructuredDocument:
         TargetModel = get_model_for_type(doc_type)
@@ -79,7 +85,7 @@ class OpenAIService(LLMService):
         base_prompt = get_prompt_for_type(doc_type, schema_json)
         prompt = f"{base_prompt}\n\nDocument text:\n{text}\n\nOutput only JSON."
 
-        content = await self._call_generate(prompt)
+        content, _ = await self._call_generate(prompt)
 
         try:
             if "```json" in content:
@@ -113,7 +119,7 @@ class OpenAIService(LLMService):
 
     async def extract_from_vision(
         self, image_path: str, doc_type: DocumentType = DocumentType.UNKNOWN
-    ) -> tuple[str, StructuredDocument]:
+    ) -> tuple[str, StructuredDocument, dict]:
         TargetModel = get_model_for_type(doc_type)
         try:
             with open(image_path, "rb") as f:
@@ -135,7 +141,7 @@ class OpenAIService(LLMService):
             [The JSON object here]
             """
 
-            content = await self._call_generate(prompt, base64_image=b64_image)
+            content, usage = await self._call_generate(prompt, base64_image=b64_image)
 
             raw_text = ""
             structured_data = TargetModel()
@@ -153,15 +159,15 @@ class OpenAIService(LLMService):
                 data = json.loads(json_part)
                 structured_data = TargetModel(**data)
 
-            return raw_text, structured_data
+            return raw_text, structured_data, usage
 
         except Exception as e:
             logger.error(f"Error during OpenAI Vision extraction: {e}")
-            return str(e), TargetModel()
+            return str(e), TargetModel(), {}
 
     async def route_query(self, query: str) -> dict:
         prompt = f"{ROUTER_PROMPT.format(query=query)}\n\nOutput only JSON."
-        content = await self._call_generate(prompt)
+        content, _ = await self._call_generate(prompt)
 
         try:
             if "```json" in content:
@@ -186,4 +192,5 @@ class OpenAIService(LLMService):
         {context}
         """
 
-        return await self._call_generate(prompt)
+        content, _ = await self._call_generate(prompt)
+        return content

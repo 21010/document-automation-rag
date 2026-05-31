@@ -11,13 +11,14 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStore(AbstractVectorStore):
-    def __init__(self, vector_size: int = 768):
+    def __init__(self, vector_size: int = 768, session_factory=None):
         self.vector_size = vector_size
+        self.session_factory = session_factory or AsyncSessionLocal
 
     async def add_documents(
         self, document_id: str, chunks: list[str], embeddings: list[list[float]], payload_base: dict
     ) -> None:
-        async with AsyncSessionLocal() as session:
+        async with self.session_factory() as session:
             for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
                 chunk_id = f"{document_id}_{i}"
                 doc_chunk = DocumentChunk(
@@ -35,15 +36,21 @@ class VectorStore(AbstractVectorStore):
     async def search(
         self, query_vector: list[float], limit: int = 5, metadata_filter: dict | None = None
     ) -> list[VectorSearchResult]:
-        async with AsyncSessionLocal() as session:
+        async with self.session_factory() as session:
             distance_expr = DocumentChunk.embedding.cosine_distance(query_vector).label("distance")
             stmt = select(DocumentChunk, distance_expr)
 
             if metadata_filter:
-                if metadata_filter.get("vendor"):
+                if metadata_filter.get("vendor") is not None:
                     stmt = stmt.where(DocumentChunk.vendor == metadata_filter["vendor"])
-                if metadata_filter.get("min_amount"):
+                if metadata_filter.get("min_amount") is not None:
                     stmt = stmt.where(DocumentChunk.amount > metadata_filter["min_amount"])
+                if metadata_filter.get("max_amount") is not None:
+                    stmt = stmt.where(DocumentChunk.amount < metadata_filter["max_amount"])
+                if metadata_filter.get("date_after") is not None:
+                    stmt = stmt.where(DocumentChunk.date >= metadata_filter["date_after"])
+                if metadata_filter.get("date_before") is not None:
+                    stmt = stmt.where(DocumentChunk.date <= metadata_filter["date_before"])
 
             # Order by cosine distance
             stmt = stmt.order_by(distance_expr).limit(limit)
