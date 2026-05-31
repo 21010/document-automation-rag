@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+data:
+  OPENAI_BASE_URL: "http://ollama:11434/v1"
+  OPENAI_GENERATIVE_MODEL: "llama3.2-vision"
+  OPENAI_EMBEDDING_BASE_URL: "http://ollama:11434/v1"
+  OPENAI_EMBEDDING_MODEL: "nomic-embed-text"
+  POSTGRES_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/rag_db"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-invoice-api
+spec:
+  selector:
+    matchLabels:
+      app: rag-invoice-api
+  template:
+    metadata:
+      labels:
+        app: rag-invoice-api
+    spec:
+      containers:
+      - name: api
+        image: doc-auto-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: api-config
+        volumeMounts:
+        - mountPath: /app/data
+          name: app-data
+      volumes:
+      - name: app-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-invoice-api
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8000
+    targetPort: 8000
+  selector:
+    app: rag-invoice-api

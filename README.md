@@ -116,7 +116,7 @@ JUDGE_LLM_MODEL="llama-3.1-70b-versatile"
 
 ## Execution Guide
 
-You can run the application using three different methods, depending on your environment.
+You can run the application using four different methods, depending on your environment.
 
 ### Option 1: Local Development (Using `uv`)
 Best for active development. Runs directly on your host machine without containers.
@@ -155,6 +155,26 @@ docker run -d \
   -p 8000:8000 \
   --env-file .env \
   doc-auto-api:latest
+```
+
+### Option 4: Kubernetes Deployment (K8s) - **Advanced**
+Best for highly available, scalable production environments. The project includes full Kubernetes manifests to orchestrate the database, local LLM, and API instances.
+
+```bash
+# 1. Ensure you have a local Kubernetes cluster running (e.g., minikube, kind, etc.)
+# 2. Build the API image and push it to your cluster's registry (for minikube: docker push):
+docker build -t doc-auto-api:latest .
+docker push doc-auto-api:latest
+
+# 3. Apply all manifests in the k8s/ directory
+kubectl apply -f k8s/01-postgres.yaml
+kubectl apply -f k8s/02-ollama.yaml
+kubectl apply -f k8s/03-ollama-job.yaml
+kubectl apply -f k8s/04-api.yaml
+
+# 4. Check the status of your pods and services
+kubectl get pods
+kubectl get services
 ```
 
 ---
