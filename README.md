@@ -37,6 +37,11 @@ tests/
 ├── evaluation/   # Automated evaluation suite (VLM Extraction and LLM Judge RAG metrics)
 ├── integration/  # System integration tests
 └── unit/         # Unit tests for core logic
+k8s/              # Kubernetes deployment manifests
+├── 01-postgres.yaml   # Database, Vector Store, and PVCs
+├── 02-ollama.yaml     # Local LLM service and PVCs
+├── 03-ollama-job.yaml # Automated job to pull LLM models into PVC
+└── 04-api.yaml        # FastAPI backend, ConfigMaps, and Health Checks
 ```
 
 ### API Endpoints & HTTP Status Codes
@@ -158,13 +163,16 @@ docker run -d \
 ```
 
 ### Option 4: Kubernetes Deployment (K8s) - **Advanced**
-Best for highly available, scalable production environments. The project includes full Kubernetes manifests to orchestrate the database, local LLM, and API instances.
+Best for highly available, scalable production environments. The project includes full Kubernetes manifests to orchestrate the database, local LLM, and API instances. It also features production-grade Health Checks (Liveness and Readiness Probes) for self-healing and zero-downtime rollouts.
 
 ```bash
-# 1. Ensure you have a local Kubernetes cluster running (e.g., minikube, kind, etc.)
-# 2. Build the API image and push it to your cluster's registry (for minikube: docker push):
+# 1. Ensure you have a local Kubernetes cluster running (e.g., minikube, Docker Desktop K8s, or kind)
+# 2. Build the API image locally:
 docker build -t doc-auto-api:latest .
-docker push doc-auto-api:latest
+
+# 3. Load the image into your local cluster:
+# - For Minikube:  minikube image load doc-auto-api:latest
+# - For Kind:      kind load docker-image doc-auto-api:latest
 
 # 3. Apply all manifests in the k8s/ directory
 kubectl apply -f k8s/01-postgres.yaml
@@ -175,6 +183,33 @@ kubectl apply -f k8s/04-api.yaml
 # 4. Check the status of your pods and services
 kubectl get pods
 kubectl get services
+
+# Important! Ollama needs time to download the models.
+# The job `ollama-pull-models` will download the models.
+# You can check the status of the job by running `kubectl get pods`.
+# It should show `ollama-pull-models` in the `STATUS` column.
+# If it's not `Running`, wait for it to finish.
+
+# 5. Access the API, Database, and LLM Locally
+# The API, PostgreSQL, and Ollama all use LoadBalancer services. You can expose all of them at once:
+# - For Minikube: Run `minikube tunnel` in a separate terminal.
+#   (This automatically maps localhost:8000, localhost:5432, and localhost:11434)
+# - Fallback (Any cluster): Run `kubectl port-forward` for each service individually.
+#   kubectl port-forward svc/rag-invoice-api 8000:8000
+#   kubectl port-forward svc/postgres 5432:5432
+#   kubectl port-forward svc/ollama 11434:11434
+```
+
+#### Customizing Kubernetes Environment (Cloud LLMs)
+
+By default, the Kubernetes manifests (`k8s/04-api.yaml`) are configured to use the local Ollama instance. If you want to use external APIs (like OpenAI) defined in your local `.env` file, you can inject it directly into the cluster, overriding the defaults:
+
+```bash
+# 1. Overwrite the ConfigMap using your local .env file
+kubectl create configmap api-config --from-env-file=.env -o yaml --dry-run=client | kubectl apply -f -
+
+# 2. Restart the API pod to load the new environment variables
+kubectl rollout restart deployment rag-invoice-api
 ```
 
 ---

@@ -23,31 +23,44 @@ spec:
         app: postgres
     spec:
       containers:
-      - name: postgres
-        image: pgvector/pgvector:0.8.2-pg18-trixie
-        env:
-        - name: POSTGRES_USER
-          value: "postgres"
-        - name: POSTGRES_PASSWORD
-          value: "postgres"
-        - name: POSTGRES_DB
-          value: "rag_db"
-        ports:
-        - containerPort: 5432
-        volumeMounts:
-        - mountPath: /var/lib/postgresql
-          name: postgres-data
+        - name: postgres
+          image: pgvector/pgvector:0.8.2-pg18-trixie
+          ports:
+            - containerPort: 5432
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "rag_db"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "rag_db"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          env:
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              value: "postgres"
+            - name: POSTGRES_DB
+              value: "rag_db"
+          volumeMounts:
+            - mountPath: /var/lib/postgresql
+              name: postgres-data
       volumes:
-      - name: postgres-data
-        persistentVolumeClaim:
-          claimName: postgres-pvc
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: postgres
 spec:
+  type: LoadBalancer
   ports:
-  - port: 5432
+    - port: 5432
   selector:
     app: postgres

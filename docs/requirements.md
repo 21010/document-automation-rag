@@ -248,3 +248,5 @@ dlaczego kolejność instrukcji w Dockerfile ma znaczenie
 | Docker i `.dockerignore` | 15 |
 | **Razem** | **100** |
 
+## Ocena 5+
+Na ocenę 5+ można zrealizować zadanie Audio albo Faktury / dokumenty w wersji wdrożeniowej: aplikacja powinna zostać uruchomiona na Kubernetesie, a część odpowiedzialna za odpowiedzi RAG powinna wykorzystywać LLM jako generator. Dodatkowo mile widziane są: osobny deployment dla API i bazy wektorowej, konfiguracja przez zmienne środowiskowe, manifesty YAML, health checki, opis wdrożenia oraz instrukcja uruchomienia klastra lokalnie, np. przez Minikube lub Kind.
