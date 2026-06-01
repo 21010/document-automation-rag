@@ -46,6 +46,8 @@ services:
       - .env
     environment:
       - POSTGRES_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/rag_db
+      - OPENAI_EMBEDDING_BASE_URL=http://ollama:11434/v1
+      - OPENAI_EMBEDDING_MODEL=nomic-embed-text
     volumes:
       - ./data:/app/data
     networks:
