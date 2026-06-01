@@ -16,7 +16,7 @@ services:
     environment:
       - OLLAMA_HOST=http://ollama:11434
     entrypoint: /bin/sh
-    command: -c "while ! ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull llama3.2-vision && ollama pull nomic-embed-text"
+    command: -c "while ! ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull nomic-embed-text"
     depends_on:
       - ollama
     networks:
@@ -42,13 +42,9 @@ services:
     container_name: rag-invoice-api
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://ollama:11434/v1}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_GENERATIVE_MODEL=${OPENAI_GENERATIVE_MODEL:-llama3.2-vision}
-      - OPENAI_EMBEDDING_BASE_URL=${OPENAI_EMBEDDING_BASE_URL:-http://ollama:11434/v1}
-      - OPENAI_EMBEDDING_API_KEY=${OPENAI_EMBEDDING_API_KEY:-}
-      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-nomic-embed-text}
       - POSTGRES_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/rag_db
     volumes:
       - ./data:/app/data

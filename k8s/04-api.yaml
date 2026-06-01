@@ -1,14 +1,4 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: api-config
-data:
-  OPENAI_BASE_URL: "http://ollama:11434/v1"
-  OPENAI_GENERATIVE_MODEL: "llama3.2-vision"
-  OPENAI_EMBEDDING_BASE_URL: "http://ollama:11434/v1"
-  OPENAI_EMBEDDING_MODEL: "nomic-embed-text"
-  POSTGRES_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/rag_db"
----
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,34 +13,39 @@ spec:
         app: rag-invoice-api
     spec:
       containers:
-      - name: api
-        image: doc-auto-api:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 8000
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 15
-          timeoutSeconds: 5
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 10
-          timeoutSeconds: 5
-        envFrom:
-        - configMapRef:
-            name: api-config
-        volumeMounts:
-        - mountPath: /app/data
-          name: app-data
+        - name: api
+          image: doc-auto-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          env:
+            - name: POSTGRES_URL
+              value: "postgresql+asyncpg://postgres:postgres@postgres:5432/rag_db"
+            - name: OPENAI_EMBEDDING_BASE_URL
+              value: "http://ollama:11434/v1"
+          envFrom:
+            - configMapRef:
+                name: api-config
+          volumeMounts:
+            - mountPath: /app/data
+              name: app-data
       volumes:
-      - name: app-data
-        emptyDir: {}
+        - name: app-data
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -59,7 +54,7 @@ metadata:
 spec:
   type: LoadBalancer
   ports:
-  - port: 8000
-    targetPort: 8000
+    - port: 8000
+      targetPort: 8000
   selector:
     app: rag-invoice-api

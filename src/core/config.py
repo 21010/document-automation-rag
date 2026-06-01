@@ -7,10 +7,17 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Document Automation RAG API"
     API_V1_STR: str = "/api/v1"
 
-    # Generative / VLM Settings
+    # Generative Settings
     OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-    OPENAI_GENERATIVE_MODEL: str = os.getenv("OPENAI_GENERATIVE_MODEL", "llama3.2-vision")
+    OPENAI_GENERATIVE_MODEL: str = os.getenv("OPENAI_GENERATIVE_MODEL", "llama3.2")
+
+    # VLM Settings
+    OPENAI_VLM_BASE_URL: str = os.getenv(
+        "OPENAI_VLM_BASE_URL", os.getenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
+    )
+    OPENAI_VLM_API_KEY: str = os.getenv("OPENAI_VLM_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+    OPENAI_VLM_MODEL: str = os.getenv("OPENAI_VLM_MODEL", "llama3.2-vision")
 
     # Embedding Settings (defaults to OPENAI_BASE_URL if not set, or local Ollama)
     OPENAI_EMBEDDING_BASE_URL: str = os.getenv(

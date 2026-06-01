@@ -73,12 +73,11 @@ The API strictly adheres to REST principles and utilizes specific HTTP status co
 
 ## Prerequisites & Setup
 
-> **Important!** `docker-compose.yml` handles setting up the database and LLM endpoint automatically.<br>
-> The default (in .env file) LLM endpoint is Ollama running on port `11434`.<br>
+> **Important!** `docker-compose.yml` handles setting up the database and local LLM endpoints automatically.<br>
 > The default database is PostgreSQL running on port `5432`.<br>
-> Default model for VLM is `llama3-vision`.<br>
-> Default model for text embedding is `nomic-embed-text`.<br>
-> You can change the database and LLM endpoint in the .env file.
+> The system utilizes a **Hybrid Architecture** by default:<br>
+> - **Embeddings**: Local Ollama (`nomic-embed-text`) running on port `11434`.<br>
+> - **Vision (VLM) & Generation**: Cloud APIs (e.g. Gemini, Groq, OpenAI) via the `.env` file.
 
 If not using docker-compose, you need to set up the external dependencies yourself. <br>
 Before running the application, ensure the external dependencies are accessible:
@@ -93,7 +92,7 @@ Copy the example environment file and configure it.
 cp .env.example .env
 ```
 
-Your `.env` file should look similar to this:
+Your `.env` file should look similar to this (supporting hybrid Local + Cloud models):
 ```env
 # Fastapi/App Config
 PROJECT_NAME="Document Automation RAG API"
@@ -101,17 +100,24 @@ PROJECT_NAME="Document Automation RAG API"
 # Database Config
 POSTGRES_URL="postgresql+asyncpg://user:password@localhost:5432/rag_db"
 
-# LLM Generation Config (VLM / QA)
-OPENAI_BASE_URL="http://localhost:11434/v1"
-OPENAI_API_KEY="sk-dummy"
-GEN_MODEL="llama3-vision"
+# LLM Generation Config (Fast local model or external Groq/OpenAI for text/QA)
+OPENAI_BASE_URL="https://api.openai.com/v1"
+OPENAI_API_KEY="your-api-key"
+OPENAI_GENERATIVE_MODEL="gpt-4o-mini"
 
-# LLM Embedding Config
+# Vision Model Config (Cloud models like Gemini/GLM-4V for high-accuracy OCR)
+OPENAI_VLM_BASE_URL="https://api.openai.com/v1"
+OPENAI_VLM_API_KEY="your-api-key"
+OPENAI_VLM_MODEL="gpt-4o-mini"
+
+# LLM Embedding Config (Local for free, fast embeddings)
 OPENAI_EMBEDDING_BASE_URL="http://localhost:11434/v1"
-OPENAI_EMBEDDING_API_KEY="sk-dummy"
-EMBED_MODEL="nomic-embed-text"
+OPENAI_EMBEDDING_API_KEY="ollama"
+OPENAI_EMBEDDING_MODEL="nomic-embed-text"
 
 # Evaluation Judge LLM Config (Optional - used by evaluate_retrieval.py)
+# It is recommended to use a different LLM for evaluation than the one used for generation and extraction.
+# This is to avoid bias in the evaluation results.
 JUDGE_LLM_BASE_URL="https://api.groq.com/openai/v1"
 JUDGE_LLM_API_KEY="gsk_dummy_key"
 JUDGE_LLM_MODEL="llama-3.1-70b-versatile"
@@ -174,23 +180,25 @@ docker build -t doc-auto-api:latest .
 # - For Minikube:  minikube image load doc-auto-api:latest
 # - For Kind:      kind load docker-image doc-auto-api:latest
 
-# 3. Apply all manifests in the k8s/ directory
+# 3. Inject your local .env configuration securely into the cluster
+kubectl create configmap api-config --from-env-file=.env
+
+# 4. Apply all manifests in the k8s/ directory
 kubectl apply -f k8s/01-postgres.yaml
 kubectl apply -f k8s/02-ollama.yaml
 kubectl apply -f k8s/03-ollama-job.yaml
 kubectl apply -f k8s/04-api.yaml
 
-# 4. Check the status of your pods and services
+# 5. Check the status of your pods and services
 kubectl get pods
 kubectl get services
 
-# Important! Ollama needs time to download the models.
-# The job `ollama-pull-models` will download the models.
+# Important! Ollama needs a moment to download the local embedding model.
+# The job `ollama-pull-models` will automatically download `nomic-embed-text`.
 # You can check the status of the job by running `kubectl get pods`.
-# It should show `ollama-pull-models` in the `STATUS` column.
-# If it's not `Running`, wait for it to finish.
+# Once the job shows `Completed`, the cluster is fully ready!
 
-# 5. Access the API, Database, and LLM Locally
+# 6. Access the API, Database, and LLM Locally
 # The API, PostgreSQL, and Ollama all use LoadBalancer services. You can expose all of them at once:
 # - For Minikube: Run `minikube tunnel` in a separate terminal.
 #   (This automatically maps localhost:8000, localhost:5432, and localhost:11434)
@@ -198,18 +206,6 @@ kubectl get services
 #   kubectl port-forward svc/rag-invoice-api 8000:8000
 #   kubectl port-forward svc/postgres 5432:5432
 #   kubectl port-forward svc/ollama 11434:11434
-```
-
-#### Customizing Kubernetes Environment (Cloud LLMs)
-
-By default, the Kubernetes manifests (`k8s/04-api.yaml`) are configured to use the local Ollama instance. If you want to use external APIs (like OpenAI) defined in your local `.env` file, you can inject it directly into the cluster, overriding the defaults:
-
-```bash
-# 1. Overwrite the ConfigMap using your local .env file
-kubectl create configmap api-config --from-env-file=.env -o yaml --dry-run=client | kubectl apply -f -
-
-# 2. Restart the API pod to load the new environment variables
-kubectl rollout restart deployment rag-invoice-api
 ```
 
 ---
@@ -282,7 +278,7 @@ This project is built with containerization strategies. Understanding how the `D
 
 A plain-text recipe of instructions that Docker uses to assemble a reproducible, isolated filesystem (an "image") containing the application and all its dependencies. It acts as a blueprint for creating the application's execution environment, ensuring consistency across different systems and preventing "it works on my machine" issues. It can be compared to an instruction set in a recipe. In this project, the Dockerfile is used to build the api, run it locally using docker compose, but it can also be used to deploy the api to a remote server. Every `Dockerfile` uses standard commands to assemble the image:
 
-- `FROM` - specifies the base image to start from. In this case, it is `python:3.11-slim-bullseye`.
+- `FROM` - specifies the base image to start from. In this case, it is `python:3.13-slim`.
 - `WORKDIR` - sets the working directory for the subsequent commands. In this case, it is `/app`.
 - `COPY` - copies files from the host machine to the container. In this case, it is copying the `requirements.txt` file to the container.
 - `RUN` - runs commands in the container. In this case, it is running `uv sync --frozen` to install the dependencies.

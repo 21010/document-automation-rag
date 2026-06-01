@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import time
 import uuid
 from typing import Any, cast
 
@@ -84,6 +85,10 @@ async def evaluate_retrieval():
         total = len(TEST_QUERIES)
         print(f"\nStarting evaluation of {total} queries...\n")
 
+        passed = 0
+        failed = 0
+        start_time = time.time()
+
         for i, query in enumerate(TEST_QUERIES):
             print(f"--- Query {i + 1}: {query} ---")
 
@@ -120,10 +125,32 @@ async def evaluate_retrieval():
                 """
 
                 content, _ = await judge_llm._call_generate(judge_prompt)
-                print(f"LLM Judge Evaluation:\n{content.strip()}\n")
+                content = content.strip()
+                print(f"LLM Judge Evaluation:\n{content}\n")
+                
+                if "GRADE: 1" in content:
+                    passed += 1
+                else:
+                    failed += 1
 
             except Exception as e:
                 print(f"Error evaluating query '{query}': {e}\n")
+                failed += 1
+                
+        duration = time.time() - start_time
+        success_rate = (passed / total) * 100 if total > 0 else 0
+        
+        print("==========================================")
+        print("EVALUATION SUMMARY")
+        print("==========================================")
+        print(f"Total Queries Evaluated : {total}")
+        print(f"Passed (Grade 1)        : {passed}")
+        print(f"Failed (Grade 0/Error)  : {failed}")
+        print(f"Success Rate            : {success_rate:.1f}%")
+        print(f"Total Duration          : {duration:.2f}s")
+        print(f"Average Duration/Query  : {(duration/total):.2f}s" if total > 0 else "")
+        print("==========================================")
+        
     finally:
         # Clean up all the injected documents
         if doc_ids:

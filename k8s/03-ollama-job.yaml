@@ -12,5 +12,5 @@ spec:
         - name: OLLAMA_HOST
           value: "http://ollama:11434"
         command: ["/bin/sh", "-c"]
-        args: ["while ! ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull llama3.2-vision && ollama pull nomic-embed-text"]
+        args: ["while ! ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull nomic-embed-text"]
       restartPolicy: OnFailure

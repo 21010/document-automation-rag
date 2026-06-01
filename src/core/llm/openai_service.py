@@ -24,6 +24,10 @@ class OpenAIService(LLMService):
         self.api_key = api_key or settings.OPENAI_API_KEY
         self.gen_model = gen_model or settings.OPENAI_GENERATIVE_MODEL
 
+        self.vlm_base_url = settings.OPENAI_VLM_BASE_URL.rstrip("/")
+        self.vlm_api_key = settings.OPENAI_VLM_API_KEY
+        self.vlm_model = settings.OPENAI_VLM_MODEL
+
         self.embed_base_url = settings.OPENAI_EMBEDDING_BASE_URL.rstrip("/")
         self.embed_api_key = settings.OPENAI_EMBEDDING_API_KEY
         self.embed_model = settings.OPENAI_EMBEDDING_MODEL
@@ -33,16 +37,27 @@ class OpenAIService(LLMService):
             f"Embed URL: {self.embed_base_url}, Model: {self.embed_model}"
         )
 
-    def _get_headers(self, for_embedding: bool = False) -> dict:
+    def _get_headers(self, for_embedding: bool = False, for_vision: bool = False) -> dict:
         headers = {"Content-Type": "application/json"}
-        api_key = self.embed_api_key if for_embedding else self.api_key
+        if for_embedding:
+            api_key = self.embed_api_key
+        elif for_vision:
+            api_key = self.vlm_api_key
+        else:
+            api_key = self.api_key
+
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         return headers
 
-    async def _call_generate(self, prompt: str, base64_image: str | None = None) -> tuple[str, dict]:
+    async def _call_generate(
+        self, prompt: str, base64_image: str | None = None, is_vision: bool = False
+    ) -> tuple[str, dict]:
         """Call OpenAI-compatible /chat/completions endpoint."""
-        url = f"{self.base_url}/chat/completions"
+        base_url = self.vlm_base_url if is_vision else self.base_url
+        model = self.vlm_model if is_vision else self.gen_model
+
+        url = f"{base_url}/chat/completions"
 
         messages = []
         if base64_image:
@@ -64,19 +79,19 @@ class OpenAIService(LLMService):
             messages.append({"role": "user", "content": prompt})
 
         payload = {
-            "model": self.gen_model,
+            "model": model,
             "messages": messages,
             "temperature": 0.0,
         }
 
         try:
             async with httpx.AsyncClient(timeout=600.0) as client:
-                response = await client.post(url, headers=self._get_headers(), json=payload)
+                response = await client.post(url, headers=self._get_headers(for_vision=is_vision), json=payload)
                 response.raise_for_status()
                 data = response.json()
                 return data["choices"][0]["message"]["content"], data.get("usage", {})
         except Exception as e:
-            logger.error(f"Error calling OpenAI API: {e}")
+            logger.error(f"Error calling OpenAI API: {e!r}")
             return "", {}
 
     async def get_structured_data(self, text: str, doc_type: DocumentType = DocumentType.UNKNOWN) -> StructuredDocument:
@@ -132,32 +147,39 @@ class OpenAIService(LLMService):
             prompt = f"""
             {base_prompt}
             
-            Extract the full raw text first, then the JSON.
-            Return your response in this exact format:
-            RAW_TEXT:
-            [Full extracted text here]
+            Return your response as a SINGLE valid JSON object with EXACTLY two fields:
+            1. "raw_text": A string containing the full, verbatim text extracted from the document.
+            2. "structured_data": A JSON object matching the requested schema.
             
-            STRUCTURED_JSON:
-            [The JSON object here]
+            Do NOT include markdown formatting or ANY other text. Just the raw JSON object.
             """
 
-            content, usage = await self._call_generate(prompt, base64_image=b64_image)
+            content, usage = await self._call_generate(prompt, base64_image=b64_image, is_vision=True)
 
             raw_text = ""
             structured_data = TargetModel()
 
-            if "RAW_TEXT:" in content and "STRUCTURED_JSON:" in content:
-                parts = content.split("STRUCTURED_JSON:")
-                raw_text = parts[0].replace("RAW_TEXT:", "").strip()
-                json_part = parts[1].strip()
+            # Clean markdown if the model ignored instructions
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
 
-                if "```json" in json_part:
-                    json_part = json_part.split("```json")[1].split("```")[0].strip()
-                elif "```" in json_part:
-                    json_part = json_part.split("```")[1].split("```")[0].strip()
+            try:
+                parsed_response = json.loads(content)
+                raw_text = parsed_response.get("raw_text", "")
 
-                data = json.loads(json_part)
-                structured_data = TargetModel(**data)
+                # Some models might nest it or put it flat
+                struct_data = parsed_response.get("structured_data", {})
+                if not struct_data:
+                    # If structured_data is missing, maybe it dumped it flat
+                    struct_data = parsed_response
+
+                structured_data = TargetModel(**struct_data)
+            except json.JSONDecodeError:
+                logger.warning(f"Could not decode JSON. Raw content: {content}")
+            except Exception as e:
+                logger.warning(f"Validation error during JSON decoding: {e}. Content: {content}")
 
             return raw_text, structured_data, usage
 
