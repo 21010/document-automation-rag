@@ -132,6 +132,8 @@ You can run the application using four different methods, depending on your envi
 ### Option 1: Local Development (Using `uv`)
 Best for active development. Runs directly on your host machine without containers.
 
+> **Note**: you need to have postgresql and all LLM endpoints configured in `.env` file on your own first.
+
 ```bash
 # 1. Install dependencies
 uv sync
@@ -156,6 +158,8 @@ docker-compose logs -f rag-invoice-api
 ### Option 3: Manual Container Deployment (Using `Dockerfile`)
 Best if you already have external databases/LLMs and just want to host the API in an isolated container.
 
+> **Note**: you need to have postgresql and all LLM endpoints configured in `.env` file on your own first.
+
 ```bash
 # 1. Build the image
 docker build -t doc-auto-api:latest .
@@ -177,8 +181,11 @@ Best for highly available, scalable production environments. The project include
 docker build -t doc-auto-api:latest .
 
 # 3. Load the image into your local cluster:
-# - For Minikube:  minikube image load doc-auto-api:latest
-# - For Kind:      kind load docker-image doc-auto-api:latest
+# - For Minikube:  
+minikube image load doc-auto-api:latest
+
+# - For Kind:
+kind load docker-image doc-auto-api:latest
 
 # 3. Inject your local .env configuration securely into the cluster
 kubectl create configmap api-config --from-env-file=.env
@@ -200,12 +207,14 @@ kubectl get services
 
 # 6. Access the API, Database, and LLM Locally
 # The API, PostgreSQL, and Ollama all use LoadBalancer services. You can expose all of them at once:
-# - For Minikube: Run `minikube tunnel` in a separate terminal.
+# - For Minikube: 
+minikube tunnel # in a separate terminal.
 #   (This automatically maps localhost:8000, localhost:5432, and localhost:11434)
+
 # - Fallback (Any cluster): Run `kubectl port-forward` for each service individually.
-#   kubectl port-forward svc/rag-invoice-api 8000:8000
-#   kubectl port-forward svc/postgres 5432:5432
-#   kubectl port-forward svc/ollama 11434:11434
+kubectl port-forward svc/rag-invoice-api 8000:8000
+kubectl port-forward svc/postgres 5432:5432
+kubectl port-forward svc/ollama 11434:11434
 ```
 
 ---
